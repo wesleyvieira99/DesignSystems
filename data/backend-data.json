@@ -1,0 +1,4122 @@
+[
+  {
+    "id": "database-per-service",
+    "name": "Banco por serviço",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "dados",
+      "microsserviços",
+      "isolamento",
+      "PostgreSQL"
+    ],
+    "summary": "Cada serviço controla seu modelo, suas credenciais e suas migrações, expondo dados por contratos explícitos.",
+    "overview": "O limite relevante é a propriedade dos dados. Pedidos pode conhecer o identificador de um cliente sem ter permissão para alterar sua tabela. Essa separação permite evoluir modelos em ritmos diferentes, mas desloca consultas e invariantes que atravessam domínios para contratos de integração. No laboratório, schemas distintos ilustram o limite lógico; bancos e instâncias separados oferecem isolamento operacional adicional. Nenhuma dessas escolhas transforma uma transação local em uma transação distribuída.",
+    "when": [
+      "Equipes precisam publicar migrações independentes e conseguem definir claramente quem responde por cada informação.",
+      "Pedidos e catálogo têm necessidades de disponibilidade, retenção ou crescimento suficientemente diferentes para justificar operação separada."
+    ],
+    "benefits": [
+      "Credenciais limitadas reduzem alterações acidentais fora do domínio responsável e tornam dependências de dados visíveis.",
+      "Cada serviço pode escolher índices, armazenamento e manutenção de acordo com seu próprio perfil de acesso."
+    ],
+    "tradeoffs": [
+      "Relatórios que combinam vários domínios precisam de composição de APIs ou cópias de leitura, com latência e atualização claramente definidas.",
+      "Backup, restauração, monitoramento e tratamento de inconsistências passam a exigir coordenação entre bancos e equipes."
+    ],
+    "avoid": [
+      "Evite separar apenas porque existem vários processos; se toda operação exige uma transação conjunta, reveja os limites do domínio."
+    ],
+    "steps": [
+      {
+        "title": "Mapear propriedade",
+        "detail": "Liste entidades e invariantes. Defina qual serviço autoriza cada alteração, distinguindo identificadores compartilhados de tabelas compartilhadas."
+      },
+      {
+        "title": "Restringir acesso",
+        "detail": "Crie credenciais próprias e remova acesso direto dos outros serviços. Comece com schemas exclusivos quando o isolamento físico ainda não for necessário."
+      },
+      {
+        "title": "Publicar contratos",
+        "detail": "Exponha consultas estáveis e eventos versionados. Documente atraso aceitável e comportamento quando o proprietário estiver indisponível."
+      },
+      {
+        "title": "Planejar recuperação",
+        "detail": "Defina restauração por domínio, reconciliação entre referências e testes de compatibilidade para migrações que atravessam serviços."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "CREATE SCHEMA pedidos;\nCREATE TABLE pedidos.pedido (\n  id bigint PRIMARY KEY,\n  cliente_id bigint NOT NULL,\n  total numeric(12,2) NOT NULL CHECK (total >= 0)\n);",
+      "explanation": "cliente_id é uma referência de negócio. Sem acesso ao banco de clientes, sua validade exige contrato e política explícita, não uma chave estrangeira entre serviços."
+    },
+    "sources": [
+      {
+        "label": "AWS — Database per service",
+        "url": "https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-data-persistence/database-per-service.html"
+      },
+      {
+        "label": "PostgreSQL — Schemas",
+        "url": "https://www.postgresql.org/docs/current/ddl-schemas.html"
+      }
+    ],
+    "related": [
+      "shared-database",
+      "event-carried-state-transfer",
+      "inbox"
+    ],
+    "prerequisites": [
+      "Domínios definidos e inventário das transações que atualmente acessam mais de uma área.",
+      "Ambiente PostgreSQL de laboratório e permissão para criar schemas; use um banco descartável."
+    ],
+    "validation": [
+      "Tente acessar a tabela de outro serviço usando a credencial de execução: a operação deve ser negada.",
+      "Interrompa o serviço de clientes e confirme que o fluxo de pedidos segue a política documentada, sem depender de consultas SQL ocultas."
+    ],
+    "failureModes": [
+      "Um serviço consulta diretamente o schema vizinho e volta a depender de suas migrações internas.",
+      "A equipe restaura somente um banco e deixa referências ou projeções incompatíveis sem mecanismo de reconciliação."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "pedidos",
+          "label": "Serviço de pedidos",
+          "technology": "python",
+          "role": "Proprietário",
+          "detail": "Valida e altera pedidos."
+        },
+        {
+          "id": "dbp",
+          "label": "Banco de pedidos",
+          "technology": "postgresql",
+          "role": "Persistência",
+          "detail": "Aceita apenas credenciais do domínio."
+        },
+        {
+          "id": "clientes",
+          "label": "Serviço de clientes",
+          "technology": "nodejs",
+          "role": "Contrato",
+          "detail": "Responde sobre clientes."
+        },
+        {
+          "id": "dbc",
+          "label": "Banco de clientes",
+          "technology": "postgresql",
+          "role": "Persistência",
+          "detail": "Preserva o modelo de clientes."
+        }
+      ],
+      "edges": [
+        {
+          "from": "pedidos",
+          "to": "dbp",
+          "label": "Transação local"
+        },
+        {
+          "from": "pedidos",
+          "to": "clientes",
+          "label": "Consulta contratual"
+        },
+        {
+          "from": "clientes",
+          "to": "dbc",
+          "label": "Dados privados"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Criar limite lógico",
+        "detail": "Execute no laboratório como proprietário do schema.",
+        "language": "sql",
+        "code": "CREATE SCHEMA IF NOT EXISTS loja_pedidos;\nCREATE TABLE loja_pedidos.pedido (id bigint PRIMARY KEY, cliente_id bigint NOT NULL);"
+      },
+      {
+        "title": "Negar acesso genérico",
+        "detail": "A aplicação deve receber permissões por uma role própria, criada pelo administrador; não use o proprietário em produção.",
+        "language": "sql",
+        "code": "REVOKE ALL ON SCHEMA loja_pedidos FROM PUBLIC;\nREVOKE ALL ON ALL TABLES IN SCHEMA loja_pedidos FROM PUBLIC;"
+      },
+      {
+        "title": "Inspecionar permissões",
+        "detail": "Confira se há concessões inesperadas antes de fornecer acesso à aplicação.",
+        "language": "sql",
+        "code": "SELECT grantee, privilege_type\nFROM information_schema.role_table_grants\nWHERE table_schema = 'loja_pedidos';"
+      }
+    ]
+  },
+  {
+    "id": "shared-database",
+    "name": "Banco compartilhado",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Fundamentos",
+    "tags": [
+      "dados",
+      "transações",
+      "acoplamento",
+      "PostgreSQL"
+    ],
+    "summary": "Vários módulos ou serviços utilizam o mesmo banco e coordenam mudanças de esquema e transações.",
+    "overview": "Um banco compartilhado pode ser uma escolha consciente para um monólito modular, uma migração gradual ou uma operação pequena. Ele permite proteger invariantes com transações e chaves estrangeiras no mesmo mecanismo. O custo aparece quando aplicações publicadas separadamente presumem versões incompatíveis de uma tabela ou disputam recursos. Compartilhar servidor não implica compartilhar todas as permissões: ainda é útil atribuir proprietários a schemas, controlar escrita e tornar consultas entre módulos explícitas. Um registro de mudanças deve indicar ordem de publicação, período de compatibilidade e responsável pela reversão, evitando que uma alteração aparentemente local interrompa outros módulos.",
+    "when": [
+      "A equipe mantém um produto com forte necessidade de consistência entre pedidos, itens e estoque dentro de uma transação.",
+      "Uma extração gradual de serviços ainda depende de tabelas antigas e precisa reduzir risco antes de separar a persistência."
+    ],
+    "benefits": [
+      "Transações locais permitem confirmar ou desfazer alterações relacionadas sem construir um protocolo entre serviços.",
+      "Uma operação centralizada simplifica inicialmente backup, observabilidade e investigação de consultas que cruzam dados."
+    ],
+    "tradeoffs": [
+      "Mudanças destrutivas de coluna exigem coordenação com todos os consumidores, incluindo tarefas agendadas e integrações pouco visíveis.",
+      "Consultas pesadas e transações longas de uma aplicação podem afetar outras mesmo quando seus processos estão isolados."
+    ],
+    "avoid": [
+      "Evite apresentar o banco compartilhado como autonomia total de microsserviços; existe um contrato operacional e estrutural comum."
+    ],
+    "steps": [
+      {
+        "title": "Inventariar consumidores",
+        "detail": "Relacione aplicações, consultas, jobs e proprietários. Registre quem escreve cada tabela e quem apenas lê."
+      },
+      {
+        "title": "Definir fronteiras",
+        "detail": "Prefira schemas por módulo, credenciais de execução distintas e concessões mínimas. Proíba escrita informal em tabelas alheias."
+      },
+      {
+        "title": "Migrar por expansão",
+        "detail": "Adicione estruturas compatíveis, publique consumidores preparados e só remova campos antigos depois de verificar seu desuso."
+      },
+      {
+        "title": "Controlar contenção",
+        "detail": "Estabeleça limites de conexão, tempo máximo de consulta e orçamento para relatórios; acompanhe bloqueios e planos de execução."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "BEGIN;\nCREATE TEMP TABLE saldo_exemplo (conta_id bigint PRIMARY KEY, valor integer);\nINSERT INTO saldo_exemplo VALUES (1, 100), (2, 0);\nUPDATE saldo_exemplo SET valor = valor - 10 WHERE conta_id = 1;\nUPDATE saldo_exemplo SET valor = valor + 10 WHERE conta_id = 2;\nSELECT * FROM saldo_exemplo ORDER BY conta_id;\nROLLBACK;",
+      "explanation": "A demonstração descartável destaca atomicidade local. Uma transferência real ainda exige autorização, controle de saldo e concorrência."
+    },
+    "sources": [
+      {
+        "label": "AWS — Shared database",
+        "url": "https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-data-persistence/shared-database.html"
+      },
+      {
+        "label": "PostgreSQL — Transactions",
+        "url": "https://www.postgresql.org/docs/current/tutorial-transactions.html"
+      }
+    ],
+    "related": [
+      "database-per-service",
+      "pessimistic-locking",
+      "optimistic-locking"
+    ],
+    "prerequisites": [
+      "Mapa de dependências e responsabilidade definida para revisar migrações que afetam mais de um consumidor.",
+      "Métricas de conexões, consultas lentas e bloqueios para distinguir simplicidade operacional de contenção oculta."
+    ],
+    "validation": [
+      "Execute a versão anterior e a nova aplicação durante uma migração; ambas devem funcionar antes da remoção de campos.",
+      "Faça um relatório lento em ambiente de carga e observe se os limites preservam a latência das transações principais."
+    ],
+    "failureModes": [
+      "Uma migração remove uma coluna ainda utilizada por um consumidor que não participou da publicação.",
+      "Conexões ou bloqueios de um único processo esgotam o banco e espalham indisponibilidade para módulos saudáveis."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "pedidos",
+          "label": "Módulo de pedidos",
+          "technology": "python",
+          "role": "Escrita",
+          "detail": "Atualiza seu conjunto de tabelas."
+        },
+        {
+          "id": "estoque",
+          "label": "Módulo de estoque",
+          "technology": "nodejs",
+          "role": "Escrita",
+          "detail": "Participa das regras compartilhadas."
+        },
+        {
+          "id": "db",
+          "label": "Banco comum",
+          "technology": "postgresql",
+          "role": "Transação",
+          "detail": "Coordena alterações e bloqueios."
+        }
+      ],
+      "edges": [
+        {
+          "from": "pedidos",
+          "to": "db",
+          "label": "Credencial de pedidos"
+        },
+        {
+          "from": "estoque",
+          "to": "db",
+          "label": "Credencial de estoque"
+        }
+      ]
+    }
+  },
+  {
+    "id": "read-replica",
+    "name": "Réplica de leitura",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "replicação",
+      "consistência",
+      "PostgreSQL",
+      "latência"
+    ],
+    "summary": "Distribui consultas para cópias do banco, preservando um caminho explícito para leituras que exigem dados recentes.",
+    "overview": "Uma réplica de leitura recebe alterações do primário e responde consultas sem assumir, por padrão, a responsabilidade pelas escritas. Com replicação assíncrona, existe um intervalo em que um pedido confirmado no primário ainda não aparece na réplica. Esse atraso faz parte do contrato da aplicação. O fluxo que acabou de criar um pedido pode consultar o primário, enquanto relatórios aceitam alguns segundos de diferença. Réplica não substitui backup: exclusões incorretas também podem ser replicadas.",
+    "when": [
+      "A carga é dominada por consultas e medições mostram que deslocá-las reduz pressão sobre o primário.",
+      "Relatórios e navegação toleram atraso conhecido, enquanto operações críticas podem continuar usando o primário."
+    ],
+    "benefits": [
+      "Separa parte do consumo de CPU e leitura de páginas sem exigir divisão imediata dos dados.",
+      "Permite dedicar recursos a relatórios e, com procedimento próprio, pode compor uma estratégia de recuperação."
+    ],
+    "tradeoffs": [
+      "Atraso e cancelamento de consultas em standby precisam ser tratados pela aplicação e acompanhados por métricas.",
+      "Replicação, retenção de WAL e recuperação acrescentam custos; uma consulta mal planejada continua sendo cara em qualquer nó."
+    ],
+    "avoid": [
+      "Evite enviar indiscriminadamente toda consulta SELECT à réplica: decisões de autorização ou saldo podem exigir estado recente."
+    ],
+    "steps": [
+      {
+        "title": "Classificar leituras",
+        "detail": "Defina quais telas aceitam atraso e quais exigem leitura após escrita. Registre a tolerância como parte do requisito."
+      },
+      {
+        "title": "Configurar replicação",
+        "detail": "Use procedimentos oficiais de backup base e streaming replication ou um serviço gerenciado. Restrinja rede e credenciais de replicação."
+      },
+      {
+        "title": "Separar conexões",
+        "detail": "Mantenha pools distintos para leitura tolerante e transações. Faça a escolha no caso de uso, sem depender apenas do verbo SQL."
+      },
+      {
+        "title": "Monitorar atraso",
+        "detail": "Observe posições de WAL, atraso percebido pela aplicação, retenção e conflitos. Retire a réplica do tráfego quando ultrapassar o orçamento."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "-- Execute no primário:\nSELECT application_name, state, sync_state,\n       pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS bytes_pendentes\nFROM pg_stat_replication;",
+      "explanation": "A diferença de posições informa bytes ainda não reproduzidos. Ela não equivale diretamente a segundos de atraso nem comprova atualização de uma consulta específica."
+    },
+    "sources": [
+      {
+        "label": "PostgreSQL — Streaming replication",
+        "url": "https://www.postgresql.org/docs/current/warm-standby.html"
+      },
+      {
+        "label": "PostgreSQL — Hot standby",
+        "url": "https://www.postgresql.org/docs/current/hot-standby.html"
+      }
+    ],
+    "related": [
+      "leader-follower",
+      "materialized-view",
+      "cache-invalidation"
+    ],
+    "prerequisites": [
+      "Primário e standby configurados; as consultas de observação exigem permissões compatíveis com o ambiente.",
+      "Identificação das operações que precisam enxergar imediatamente uma alteração confirmada."
+    ],
+    "validation": [
+      "Atrase a replicação no laboratório e verifique se a tela crítica continua lendo do primário após uma escrita.",
+      "Compare indicadores do banco com um registro sentinela atualizado periodicamente, medindo o atraso percebido por uma consulta real."
+    ],
+    "failureModes": [
+      "O usuário cria um registro e recebe ausência na tela seguinte porque a leitura foi encaminhada a uma cópia atrasada.",
+      "Um slot inativo retém WAL por tempo excessivo e pressiona o disco do primário."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "api",
+          "label": "API",
+          "technology": "python",
+          "role": "Roteamento",
+          "detail": "Escolhe a consistência exigida."
+        },
+        {
+          "id": "primary",
+          "label": "Primário",
+          "technology": "postgresql",
+          "role": "Escrita",
+          "detail": "Confirma transações."
+        },
+        {
+          "id": "replica",
+          "label": "Réplica",
+          "technology": "postgresql",
+          "role": "Leitura",
+          "detail": "Reproduz WAL e atende consultas."
+        }
+      ],
+      "edges": [
+        {
+          "from": "api",
+          "to": "primary",
+          "label": "Escritas e leituras críticas"
+        },
+        {
+          "from": "primary",
+          "to": "replica",
+          "label": "Streaming de WAL"
+        },
+        {
+          "from": "api",
+          "to": "replica",
+          "label": "Leituras tolerantes"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Identificar o papel",
+        "detail": "Execute em cada conexão para evitar confundir primário e standby.",
+        "language": "sql",
+        "code": "SELECT pg_is_in_recovery() AS em_recuperacao;"
+      },
+      {
+        "title": "Inspecionar envio",
+        "detail": "Execute no primário com uma role autorizada a observar estatísticas.",
+        "language": "sql",
+        "code": "SELECT application_name, state, sent_lsn, write_lsn, flush_lsn, replay_lsn\nFROM pg_stat_replication;"
+      },
+      {
+        "title": "Inspecionar reprodução",
+        "detail": "Execute no standby. A diferença temporal pode crescer quando não existem novas transações, portanto não a use isoladamente.",
+        "language": "sql",
+        "code": "SELECT pg_last_wal_receive_lsn() AS recebido,\n       pg_last_wal_replay_lsn() AS reproduzido,\n       pg_last_xact_replay_timestamp() AS ultima_transacao;"
+      }
+    ]
+  },
+  {
+    "id": "sharding",
+    "name": "Sharding de dados",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "escala horizontal",
+      "dados",
+      "roteamento",
+      "tenancy"
+    ],
+    "summary": "Divide registros entre bancos independentes usando uma chave de distribuição e um mecanismo estável de roteamento.",
+    "overview": "Sharding distribui partes diferentes do conjunto de dados por unidades que podem crescer separadamente. Uma loja multitenant pode manter todos os pedidos de um cliente empresarial no mesmo shard, preservando transações locais nesse limite. A escolha da chave determina balanceamento, consultas e migrações futuras. Ela precisa considerar tamanho e intensidade de acesso: cem clientes pequenos não compensam automaticamente um cliente que concentra quase toda a carga. O roteador também se torna parte crítica do contrato de persistência.",
+    "when": [
+      "O limite de armazenamento ou escrita de um único banco foi medido e otimizações locais já não resolvem o crescimento.",
+      "As principais operações possuem uma chave de domínio que permite localizar a maior parte dos dados em uma única unidade."
+    ],
+    "benefits": [
+      "Espalha capacidade de armazenamento e escrita entre servidores, com expansão orientada à distribuição real da carga.",
+      "Permite isolar clientes ou regiões específicas quando os requisitos de negócio combinam com a chave escolhida."
+    ],
+    "tradeoffs": [
+      "Consultas globais, unicidade entre shards e transações distribuídas ficam mais difíceis e precisam de estratégias próprias.",
+      "Mover dados exige controlar roteamento, duplicação temporária e escritas concorrentes; adicionar um servidor não rebalanceia tudo com segurança."
+    ],
+    "avoid": [
+      "Evite começar com sharding sem evidência de necessidade; sua complexidade aparece também em backup, suporte e investigação de incidentes."
+    ],
+    "steps": [
+      {
+        "title": "Medir distribuição",
+        "detail": "Colete tamanho e tráfego por chave candidata, incluindo percentis e clientes extremos. Simule consultas que cruzariam limites."
+      },
+      {
+        "title": "Definir roteamento",
+        "detail": "Escolha diretório explícito, faixas ou hash com buckets virtuais. Versione o mapa e mantenha comportamento determinístico entre linguagens."
+      },
+      {
+        "title": "Preservar invariantes",
+        "detail": "Inclua a chave de shard em acessos e índices relevantes. Defina como gerar identificadores e tratar operações globais."
+      },
+      {
+        "title": "Ensaiar movimento",
+        "detail": "Copie um bucket, acompanhe alterações, valide contagens e faça uma troca controlada de proprietário com estratégia de retorno."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import hashlib\n\ndef bucket(tenant_id: str, total: int = 256) -> int:\n    digest = hashlib.sha256(tenant_id.encode('utf-8')).digest()\n    return int.from_bytes(digest[:8], 'big') % total\n\nprint(bucket('empresa-42'))",
+      "explanation": "O código escolhe um bucket lógico estável, não um servidor. Um diretório separado deve mapear buckets a shards, permitindo mover capacidade sem trocar a função."
+    },
+    "sources": [
+      {
+        "label": "Microsoft — Sharding pattern",
+        "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/sharding"
+      },
+      {
+        "label": "Apache Cassandra — Dynamo architecture",
+        "url": "https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html"
+      }
+    ],
+    "related": [
+      "partitioning",
+      "consistent-hashing",
+      "database-per-service"
+    ],
+    "prerequisites": [
+      "Inventário das consultas globais e das invariantes que não podem ser limitadas a uma chave.",
+      "Métricas de distribuição e capacidade operacional para administrar múltiplos bancos."
+    ],
+    "validation": [
+      "Gere uma carga com clientes de tamanhos desiguais e compare distribuição de bytes, operações e latência por shard.",
+      "Durante uma migração experimental, confirme que cada escrita possui exatamente um proprietário e que a leitura não perde registros."
+    ],
+    "failureModes": [
+      "Uma chave muito popular cria um shard quente enquanto os demais permanecem ociosos.",
+      "Uma versão antiga do mapa direciona uma escrita ao proprietário anterior após a migração."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "api",
+          "label": "API",
+          "technology": "python",
+          "role": "Acesso",
+          "detail": "Fornece a chave do cliente."
+        },
+        {
+          "id": "router",
+          "label": "Diretório de shards",
+          "technology": "service",
+          "role": "Roteamento",
+          "detail": "Mapeia buckets e versões."
+        },
+        {
+          "id": "a",
+          "label": "Shard A",
+          "technology": "postgresql",
+          "role": "Dados",
+          "detail": "Armazena parte dos clientes."
+        },
+        {
+          "id": "b",
+          "label": "Shard B",
+          "technology": "postgresql",
+          "role": "Dados",
+          "detail": "Armazena outros clientes."
+        }
+      ],
+      "edges": [
+        {
+          "from": "api",
+          "to": "router",
+          "label": "Resolver proprietário"
+        },
+        {
+          "from": "router",
+          "to": "a",
+          "label": "Buckets atribuídos"
+        },
+        {
+          "from": "router",
+          "to": "b",
+          "label": "Buckets atribuídos"
+        }
+      ]
+    }
+  },
+  {
+    "id": "partitioning",
+    "name": "Particionamento de tabelas",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "PostgreSQL",
+      "dados",
+      "retenção",
+      "performance"
+    ],
+    "summary": "Organiza uma tabela lógica em partes físicas para facilitar consultas seletivas e manutenção do ciclo de vida.",
+    "overview": "Particionar uma tabela por mês pode tornar a remoção de histórico mais previsível e limitar as partes lidas por consultas que filtram datas. Isso não distribui automaticamente a carga por servidores: no exemplo, todas as partições continuam no mesmo PostgreSQL. O benefício depende de filtros compatíveis com a chave e de uma quantidade administrável de partições. Índices continuam necessários dentro delas. O projeto também precisa decidir antecipadamente o que acontece quando chega um registro fora das faixas existentes.",
+    "when": [
+      "Eventos crescem continuamente e a política de retenção permite descartar períodos inteiros com procedimento controlado.",
+      "Consultas frequentes incluem intervalos da chave de particionamento e podem evitar a maioria das partições."
+    ],
+    "benefits": [
+      "Facilita manutenção por período e permite tratar partes antigas sem manipular cada linha individualmente.",
+      "A eliminação de partições pode reduzir o conjunto examinado quando o predicado permite identificar as faixas relevantes."
+    ],
+    "tradeoffs": [
+      "A criação antecipada, monitoramento de lacunas e manutenção de índices precisam entrar na operação recorrente.",
+      "Restrições de unicidade em tabelas particionadas exigem considerar a chave de particionamento; uma chave global pode precisar de outro desenho."
+    ],
+    "avoid": [
+      "Evite criar milhares de partições minúsculas esperando ganhos automáticos; planejamento e manutenção também consomem recursos."
+    ],
+    "steps": [
+      {
+        "title": "Escolher chave",
+        "detail": "Use o padrão de consulta e retenção para decidir entre faixa, lista ou hash. Examine dados atrasados e atualizações da chave."
+      },
+      {
+        "title": "Criar tabela pai",
+        "detail": "Declare a estratégia na tabela lógica e defina tipos e restrições consistentes. Planeje como a chave primária incorpora a chave de partição."
+      },
+      {
+        "title": "Provisionar faixas",
+        "detail": "Crie partições futuras antes da chegada dos dados. Defina um tratamento explícito para registros inesperados, com alerta."
+      },
+      {
+        "title": "Comparar planos",
+        "detail": "Execute consultas reais com EXPLAIN e confira as partições acessadas. Automatize retenção com aprovação operacional adequada ao dado."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "CREATE TABLE evento_part (\n  ocorrido_em date NOT NULL,\n  id bigint NOT NULL,\n  payload jsonb NOT NULL,\n  PRIMARY KEY (ocorrido_em, id)\n) PARTITION BY RANGE (ocorrido_em);\nCREATE TABLE evento_part_2026_10 PARTITION OF evento_part\nFOR VALUES FROM ('2026-10-01') TO ('2026-11-01');",
+      "explanation": "O limite superior é exclusivo. Uma data sem partição correspondente falha neste exemplo, tornando necessária a criação antecipada das próximas faixas."
+    },
+    "sources": [
+      {
+        "label": "PostgreSQL — Table partitioning",
+        "url": "https://www.postgresql.org/docs/current/ddl-partitioning.html"
+      },
+      {
+        "label": "PostgreSQL — EXPLAIN",
+        "url": "https://www.postgresql.org/docs/current/using-explain.html"
+      }
+    ],
+    "related": [
+      "sharding",
+      "read-replica",
+      "materialized-view"
+    ],
+    "prerequisites": [
+      "Distribuição temporal conhecida e política de retenção definida com o responsável pelos dados.",
+      "PostgreSQL e um schema de laboratório sem tabelas com os nomes utilizados no exemplo."
+    ],
+    "validation": [
+      "Verifique no plano que uma consulta de outubro acessa somente a partição esperada.",
+      "Insira uma data fora da faixa no laboratório e confirme que a falha gera observabilidade e um procedimento de correção."
+    ],
+    "failureModes": [
+      "Uma partição futura não foi criada e novas gravações começam a falhar na virada do período.",
+      "Consultas omitem o filtro da chave e continuam lendo todas as partições, mantendo o custo elevado."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "api",
+          "label": "Ingestão",
+          "technology": "python",
+          "role": "Escrita",
+          "detail": "Envia evento com data."
+        },
+        {
+          "id": "parent",
+          "label": "Tabela lógica",
+          "technology": "postgresql",
+          "role": "Roteamento",
+          "detail": "Seleciona partição pela faixa."
+        },
+        {
+          "id": "oct",
+          "label": "Partição outubro",
+          "technology": "database",
+          "role": "Dados",
+          "detail": "Guarda registros do período."
+        },
+        {
+          "id": "nov",
+          "label": "Partição novembro",
+          "technology": "database",
+          "role": "Dados",
+          "detail": "Recebe o período seguinte."
+        }
+      ],
+      "edges": [
+        {
+          "from": "api",
+          "to": "parent",
+          "label": "INSERT com data"
+        },
+        {
+          "from": "parent",
+          "to": "oct",
+          "label": "Faixa de outubro"
+        },
+        {
+          "from": "parent",
+          "to": "nov",
+          "label": "Faixa de novembro"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Preparar duas faixas",
+        "detail": "Execute em um banco descartável para estudar o roteamento.",
+        "language": "sql",
+        "code": "CREATE TABLE laboratorio_evento (dia date NOT NULL, id bigint NOT NULL) PARTITION BY RANGE (dia);\nCREATE TABLE laboratorio_out PARTITION OF laboratorio_evento FOR VALUES FROM ('2026-10-01') TO ('2026-11-01');\nCREATE TABLE laboratorio_nov PARTITION OF laboratorio_evento FOR VALUES FROM ('2026-11-01') TO ('2026-12-01');"
+      },
+      {
+        "title": "Observar localização",
+        "detail": "tableoid mostra a relação física que contém cada linha.",
+        "language": "sql",
+        "code": "INSERT INTO laboratorio_evento VALUES ('2026-10-20', 1), ('2026-11-02', 2);\nSELECT tableoid::regclass AS particao, * FROM laboratorio_evento;"
+      },
+      {
+        "title": "Verificar seleção",
+        "detail": "Inspecione a relação escolhida no plano antes de concluir que houve ganho.",
+        "language": "sql",
+        "code": "EXPLAIN SELECT * FROM laboratorio_evento\nWHERE dia >= DATE '2026-10-01' AND dia < DATE '2026-11-01';"
+      }
+    ]
+  },
+  {
+    "id": "leader-follower",
+    "name": "Replicação líder–seguidores",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "replicação",
+      "disponibilidade",
+      "failover",
+      "consistência"
+    ],
+    "summary": "Centraliza a ordem das escritas em um líder e replica suas alterações para seguidores com garantias definidas.",
+    "overview": "O líder recebe alterações e produz uma sequência que os seguidores reproduzem. Essa topologia simplifica a ordem das escritas, mas a confirmação ao cliente depende da política adotada: somente persistência local, recepção remota ou aplicação remota não significam a mesma coisa. Uma promoção também exige impedir que o líder antigo continue aceitando alterações. O desenho precisa combinar mecanismo de replicação, detecção de falhas e controle de acesso ao primário; uma réplica existente, sozinha, não fornece failover seguro.",
+    "when": [
+      "O domínio se beneficia de um ponto responsável por ordenar escritas, enquanto cópias adicionais atendem recuperação ou leituras.",
+      "A equipe consegue definir perda aceitável de dados, tempo de recuperação e comportamento durante uma partição de rede."
+    ],
+    "benefits": [
+      "Uma ordem de replicação explícita reduz a necessidade de reconciliar escritas concorrentes originadas em nós diferentes.",
+      "Seguidores oferecem cópias úteis para recuperação e, quando permitido pelo mecanismo, distribuição de consultas."
+    ],
+    "tradeoffs": [
+      "O líder concentra parte da carga e pode limitar a capacidade de escrita mesmo com muitos seguidores.",
+      "Esperar confirmação remota aumenta latência ou reduz disponibilidade; confirmar antes dela pode perder alterações numa promoção."
+    ],
+    "avoid": [
+      "Evite promover um seguidor apenas porque o monitor perdeu contato com o líder; a rede pode estar dividida e o líder ainda ativo."
+    ],
+    "steps": [
+      {
+        "title": "Definir confirmação",
+        "detail": "Documente o ponto em que a escrita é considerada durável, incluindo quantos nós e quais tipos de persistência participam."
+      },
+      {
+        "title": "Configurar transporte",
+        "detail": "Habilite replicação autenticada, monitore posições e planeje retenção suficiente para interrupções comuns."
+      },
+      {
+        "title": "Controlar liderança",
+        "detail": "Use um procedimento comprovado de eleição e fencing. Atualize endpoints somente depois de garantir a exclusividade do novo líder."
+      },
+      {
+        "title": "Ensaiar recuperação",
+        "detail": "Interrompa processo, disco e conectividade separadamente. Compare dados confirmados, tempo de indisponibilidade e reintegração do nó anterior."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "SELECT pg_is_in_recovery() AS seguidor;\nSHOW synchronous_commit;\nSHOW synchronous_standby_names;",
+      "explanation": "As consultas ajudam a inspecionar um PostgreSQL. A configuração deve ser interpretada junto com os seguidores realmente conectados e com o procedimento de promoção."
+    },
+    "sources": [
+      {
+        "label": "PostgreSQL — High availability and replication",
+        "url": "https://www.postgresql.org/docs/current/high-availability.html"
+      },
+      {
+        "label": "PostgreSQL — Synchronous replication",
+        "url": "https://www.postgresql.org/docs/current/warm-standby.html"
+      }
+    ],
+    "related": [
+      "read-replica",
+      "raft-consensus",
+      "fencing-token"
+    ],
+    "prerequisites": [
+      "RPO e RTO definidos, com tolerância de perda e tempo de recuperação compreendidos pelo negócio.",
+      "Automação de liderança ou procedimento operacional que evite dois primários graváveis."
+    ],
+    "validation": [
+      "Confirme escritas identificadas antes de interromper o líder e verifique quais aparecem no nó promovido.",
+      "Isole o líder da coordenação, mantendo clientes conectados, e confirme que ele perde autoridade antes da promoção concorrente."
+    ],
+    "failureModes": [
+      "Dois nós aceitam escritas durante uma partição e produzem históricos que o mecanismo não consegue combinar automaticamente.",
+      "Uma confirmação assíncrona é interpretada como persistência em todas as cópias e viola a expectativa de recuperação."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "api",
+          "label": "Clientes de escrita",
+          "technology": "service",
+          "role": "Entrada",
+          "detail": "Usam o endpoint autorizado."
+        },
+        {
+          "id": "leader",
+          "label": "Líder",
+          "technology": "postgresql",
+          "role": "Ordenação",
+          "detail": "Produz o histórico de alterações."
+        },
+        {
+          "id": "f1",
+          "label": "Seguidor A",
+          "technology": "postgresql",
+          "role": "Réplica",
+          "detail": "Reproduz alterações."
+        },
+        {
+          "id": "f2",
+          "label": "Seguidor B",
+          "technology": "postgresql",
+          "role": "Réplica",
+          "detail": "Mantém outra cópia."
+        }
+      ],
+      "edges": [
+        {
+          "from": "api",
+          "to": "leader",
+          "label": "Escritas"
+        },
+        {
+          "from": "leader",
+          "to": "f1",
+          "label": "Replicação"
+        },
+        {
+          "from": "leader",
+          "to": "f2",
+          "label": "Replicação"
+        }
+      ]
+    }
+  },
+  {
+    "id": "leaderless-quorum",
+    "name": "Replicação sem líder e quóruns",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "Cassandra",
+      "consistência",
+      "replicação",
+      "quórum"
+    ],
+    "summary": "Distribui leituras e escritas entre réplicas e escolhe quantas respostas são necessárias para concluir cada operação.",
+    "overview": "Em um modelo sem líder fixo para cada escrita, um coordenador encaminha a operação às réplicas responsáveis pela chave. Considere N cópias, W confirmações de escrita e R respostas de leitura. A condição R + W > N cria interseção entre conjuntos sob determinadas hipóteses, mas não resolve sozinha escritas concorrentes, relógios, falhas de reparo ou quóruns relaxados. O contrato depende do produto e da resolução de versões. Não apresente essa desigualdade como prova universal de linearizabilidade.",
+    "when": [
+      "O sistema precisa distribuir acesso entre réplicas e dispõe de uma política explícita para versões concorrentes e reparação.",
+      "O produto escolhido oferece níveis de consistência ajustáveis e a aplicação consegue distinguir operações comuns de invariantes críticas."
+    ],
+    "benefits": [
+      "Permite ajustar a quantidade de confirmações exigidas por operação conforme o compromisso entre latência e consistência.",
+      "A ausência de um único líder de escrita por chave pode reduzir dependências de promoção para determinados tipos de falha."
+    ],
+    "tradeoffs": [
+      "Reparação, tombstones, conflitos e comportamento de relógios fazem parte da operação e precisam de compreensão específica.",
+      "Uma indisponibilidade que impede o quórum pode bloquear operações, mesmo existindo uma réplica acessível ao cliente."
+    ],
+    "avoid": [
+      "Evite usar uma escrita comum com resolução por timestamp como substituta de uma operação condicional para saldo ou reserva exclusiva."
+    ],
+    "steps": [
+      {
+        "title": "Definir fator de replicação",
+        "detail": "Determine quantas cópias existem e em quais domínios de falha. Diferencie quórum local de quórum entre regiões."
+      },
+      {
+        "title": "Escolher consistência",
+        "detail": "Estabeleça níveis para leitura e escrita por caso de uso, considerando o conjunto real de réplicas e sua distribuição."
+      },
+      {
+        "title": "Tratar concorrência",
+        "detail": "Estude a regra de resolução do mecanismo. Use operações condicionais apropriadas quando uma invariante exigir comparação atômica."
+      },
+      {
+        "title": "Operar reparação",
+        "detail": "Planeje reparos, remoções e retenção de tombstones. Teste o retorno de réplicas que ficaram desconectadas por muito tempo."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from itertools import combinations\n\nreplicas = {'A', 'B', 'C'}\nleituras = list(combinations(replicas, 2))\nescritas = list(combinations(replicas, 2))\nassert all(set(r) & set(w) for r in leituras for w in escritas)\nprint('Todo par de conjuntos possui interseção.')",
+      "explanation": "A simulação comprova somente interseção de conjuntos para N=3, R=2 e W=2. Ela não simula versões, concorrência nem o protocolo de um banco real."
+    },
+    "sources": [
+      {
+        "label": "Apache Cassandra — Dynamo architecture",
+        "url": "https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html"
+      },
+      {
+        "label": "Apache Cassandra — Guarantees",
+        "url": "https://cassandra.apache.org/doc/latest/cassandra/architecture/guarantees.html"
+      }
+    ],
+    "related": [
+      "leader-follower",
+      "raft-consensus",
+      "consistent-hashing"
+    ],
+    "prerequisites": [
+      "Conhecimento da política de resolução de versões e das garantias específicas do banco escolhido.",
+      "Distribuição das réplicas e objetivos de disponibilidade documentados por região."
+    ],
+    "validation": [
+      "Desconecte diferentes combinações de réplicas e registre quais níveis de consistência ainda conseguem concluir operações.",
+      "Produza escritas concorrentes para a mesma chave e confira se o resultado atende à regra de negócio, não apenas ao protocolo."
+    ],
+    "failureModes": [
+      "Uma política de último timestamp vence descarta uma alteração semanticamente importante quando operações concorrem.",
+      "Uma réplica retorna após o período de retenção previsto e dados removidos podem reaparecer se reparação e tombstones forem mal operados."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "api",
+          "label": "Cliente",
+          "technology": "client",
+          "role": "Requisição",
+          "detail": "Escolhe o nível de consistência."
+        },
+        {
+          "id": "coord",
+          "label": "Coordenador",
+          "technology": "service",
+          "role": "Agregação",
+          "detail": "Espera as respostas exigidas."
+        },
+        {
+          "id": "a",
+          "label": "Réplica A",
+          "technology": "database",
+          "role": "Cópia",
+          "detail": "Armazena uma versão."
+        },
+        {
+          "id": "b",
+          "label": "Réplica B",
+          "technology": "database",
+          "role": "Cópia",
+          "detail": "Participa do quórum."
+        },
+        {
+          "id": "c",
+          "label": "Réplica C",
+          "technology": "database",
+          "role": "Cópia",
+          "detail": "Recebe replicação e reparos."
+        }
+      ],
+      "edges": [
+        {
+          "from": "api",
+          "to": "coord",
+          "label": "Ler ou escrever"
+        },
+        {
+          "from": "coord",
+          "to": "a",
+          "label": "Solicitar resposta"
+        },
+        {
+          "from": "coord",
+          "to": "b",
+          "label": "Solicitar resposta"
+        },
+        {
+          "from": "coord",
+          "to": "c",
+          "label": "Solicitar resposta"
+        }
+      ]
+    }
+  },
+  {
+    "id": "raft-consensus",
+    "name": "Consenso com Raft",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "consenso",
+      "coordenação",
+      "Raft",
+      "etcd"
+    ],
+    "summary": "Mantém um log replicado acordado por maioria para construir coordenação consistente entre máquinas sujeitas a falhas.",
+    "overview": "Raft organiza o consenso por termos, eleição de líder e replicação de log. Uma implementação correta preserva regras de persistência e compromisso que vão além de contar respostas. Um grupo com três votantes tolera a perda de um deles para progresso; cinco toleram duas, desde que uma maioria consiga se comunicar. Em produção, use implementações estabelecidas, como um serviço de coordenação baseado em Raft. O exemplo abaixo é apenas aritmética de quórum, não uma implementação do protocolo.",
+    "when": [
+      "É necessário manter metadados de coordenação ou decisões ordenadas com uma visão consistente entre participantes.",
+      "A operação aceita interromper escritas sem maioria em troca de preservar as garantias do registro acordado."
+    ],
+    "benefits": [
+      "Fornece uma base para máquinas de estado replicadas que aplicam comandos comprometidos numa ordem comum.",
+      "Torna explícita a relação entre número de votantes, falhas toleradas e disponibilidade para avançar."
+    ],
+    "tradeoffs": [
+      "A latência de consenso inclui comunicação e persistência suficientes para atingir maioria, tornando distância entre regiões relevante.",
+      "Mudanças de membros, snapshots e recuperação de disco exigem procedimentos específicos; ampliar o grupo não aumenta linearmente o throughput."
+    ],
+    "avoid": [
+      "Evite implementar Raft do zero para resolver uma necessidade comum de aplicação ou tratar votos como substituto de todas as regras do protocolo."
+    ],
+    "steps": [
+      {
+        "title": "Delimitar estado",
+        "detail": "Mantenha no serviço de consenso metadados pequenos e críticos. Separe arquivos grandes ou cargas analíticas do caminho de coordenação."
+      },
+      {
+        "title": "Distribuir votantes",
+        "detail": "Escolha três ou cinco membros em domínios de falha apropriados. Verifique latência, armazenamento e conectividade entre todos."
+      },
+      {
+        "title": "Configurar operação",
+        "detail": "Use a biblioteca ou serviço oficial para autenticação, snapshots e alterações de membros, respeitando seu protocolo."
+      },
+      {
+        "title": "Testar perda de maioria",
+        "detail": "Simule falhas progressivas e confirme que operações deixam de avançar quando necessário, sem criar decisões contraditórias."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "def quorum(votantes: int) -> int:\n    if votantes < 1:\n        raise ValueError('É necessário pelo menos um votante')\n    return votantes // 2 + 1\n\nfor n in (3, 5):\n    print(n, quorum(n), n - quorum(n))",
+      "explanation": "A última coluna mostra quantos membros podem ficar indisponíveis mantendo uma maioria. O cálculo não cobre eleição, persistência, termos ou segurança do log."
+    },
+    "sources": [
+      {
+        "label": "Ongaro e Ousterhout — Raft",
+        "url": "https://raft.github.io/raft.pdf"
+      },
+      {
+        "label": "etcd — API guarantees",
+        "url": "https://etcd.io/docs/v3.6/learning/api_guarantees/"
+      }
+    ],
+    "related": [
+      "leader-follower",
+      "lease",
+      "fencing-token"
+    ],
+    "prerequisites": [
+      "Uma implementação mantida e compreensão das operações que ela garante como linearizáveis.",
+      "Discos e rede monitorados; falhas de persistência afetam o protocolo mesmo quando processos continuam vivos."
+    ],
+    "validation": [
+      "Com três votantes, remova um e confira progresso; remova outro e confirme a indisponibilidade esperada para novas decisões.",
+      "Reinicie membros com seus dados persistidos e verifique convergência do log sem restaurar snapshots incompatíveis."
+    ],
+    "failureModes": [
+      "Uma alteração incorreta de membros remove a maioria disponível e impede a recuperação pelo procedimento normal.",
+      "Discos lentos provocam eleições repetidas, elevando latência e interrompendo progresso mesmo sem perda física de servidores."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "api",
+          "label": "Cliente de coordenação",
+          "technology": "service",
+          "role": "Solicitação",
+          "detail": "Envia comandos pequenos."
+        },
+        {
+          "id": "leader",
+          "label": "Líder Raft",
+          "technology": "service",
+          "role": "Ordenação",
+          "detail": "Propõe entradas do log."
+        },
+        {
+          "id": "a",
+          "label": "Votante A",
+          "technology": "service",
+          "role": "Consenso",
+          "detail": "Persiste e responde."
+        },
+        {
+          "id": "b",
+          "label": "Votante B",
+          "technology": "service",
+          "role": "Consenso",
+          "detail": "Completa a maioria possível."
+        }
+      ],
+      "edges": [
+        {
+          "from": "api",
+          "to": "leader",
+          "label": "Comando"
+        },
+        {
+          "from": "leader",
+          "to": "a",
+          "label": "Replicar log"
+        },
+        {
+          "from": "leader",
+          "to": "b",
+          "label": "Replicar log"
+        }
+      ]
+    }
+  },
+  {
+    "id": "consistent-hashing",
+    "name": "Hash consistente",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "distribuição",
+      "cache",
+      "sharding",
+      "algoritmos"
+    ],
+    "summary": "Atribui chaves a um anel de posições para limitar a redistribuição quando membros entram ou saem.",
+    "overview": "Aplicar hash(chave) módulo quantidade de servidores muda o destino de muitas chaves quando essa quantidade varia. O hash consistente coloca membros e chaves em um espaço ordenado e escolhe o próximo membro do anel. Nós virtuais distribuem várias posições por servidor e podem melhorar o balanceamento. O algoritmo resolve localização, não migração nem consistência: os dados ainda precisam ser copiados ou reconstruídos, e todos os clientes precisam concordar sobre o conjunto de membros.",
+    "when": [
+      "Um cache distribuído recebe novos nós e deseja reduzir a fração de chaves que perde sua localização anterior.",
+      "Um armazenamento já possui mecanismos de replicação e movimento, mas precisa de atribuição estável para partes dos dados."
+    ],
+    "benefits": [
+      "Reduz mudanças de proprietário em relação ao módulo simples quando a composição do conjunto se altera.",
+      "Permite usar posições virtuais para ajustar distribuição e representar servidores com capacidades distintas."
+    ],
+    "tradeoffs": [
+      "Distribuição uniforme de chaves não garante distribuição uniforme de tráfego: uma única chave popular continua concentrando acessos.",
+      "Membership desatualizado pode gerar destinos diferentes; mover dados e tratar indisponibilidade exigem protocolos adicionais."
+    ],
+    "avoid": [
+      "Evite usar hash consistente como justificativa para dispensar diretório de versões, replicação ou proteção contra escritas concorrentes."
+    ],
+    "steps": [
+      {
+        "title": "Escolher representação",
+        "detail": "Defina codificação das chaves e função estável. Não use o hash padrão de uma linguagem se ele variar entre execuções."
+      },
+      {
+        "title": "Criar posições virtuais",
+        "detail": "Gere várias posições determinísticas por membro. Meça distribuição com a quantidade real de chaves e capacidades."
+      },
+      {
+        "title": "Versionar membros",
+        "detail": "Publique a mesma visão do anel para os clientes e estabeleça como uma transição convive com requisições em andamento."
+      },
+      {
+        "title": "Validar remapeamento",
+        "detail": "Compare proprietários antes e depois de adicionar ou remover um nó e ensaie a transferência ou reconstrução dos valores."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from bisect import bisect_left\nfrom hashlib import sha256\n\ndef h(texto):\n    return int.from_bytes(sha256(texto.encode()).digest()[:8], 'big')\n\ndef dono(chave, membros):\n    anel = sorted((h(f'{m}:{i}'), m) for m in membros for i in range(32))\n    if not anel:\n        raise ValueError('Anel vazio')\n    posicoes = [p for p, _ in anel]\n    return anel[bisect_left(posicoes, h(chave)) % len(anel)][1]\n\nprint(dono('cliente:42', ['cache-a', 'cache-b', 'cache-c']))",
+      "explanation": "Implementação didática de localização com 32 posições por membro. Em produção, construa o anel uma vez por versão e trate colisões e capacidades explicitamente."
+    },
+    "sources": [
+      {
+        "label": "Apache Cassandra — Partitioning",
+        "url": "https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html"
+      },
+      {
+        "label": "Amazon — Dynamo paper",
+        "url": "https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf"
+      }
+    ],
+    "related": [
+      "sharding",
+      "leaderless-quorum",
+      "cache-invalidation"
+    ],
+    "prerequisites": [
+      "Um mecanismo de distribuição de membership e uma estratégia independente de migração dos dados.",
+      "Conjunto representativo de chaves com frequência de acesso, não somente identificadores uniformes gerados artificialmente."
+    ],
+    "validation": [
+      "Conte chaves e tráfego por membro antes e depois de adicionar um servidor, verificando remapeamento e desequilíbrio.",
+      "Execute o cálculo em processos ou linguagens diferentes com os mesmos bytes de entrada e confira proprietários idênticos."
+    ],
+    "failureModes": [
+      "Clientes com versões diferentes do anel escrevem em lugares distintos e criam divergência de dados.",
+      "Um nó recebe uma chave extremamente quente e fica saturado apesar do balanceamento estatístico do conjunto."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "api",
+          "label": "Clientes",
+          "technology": "client",
+          "role": "Entrada",
+          "detail": "Fornecem a chave."
+        },
+        {
+          "id": "ring",
+          "label": "Anel versionado",
+          "technology": "python",
+          "role": "Roteamento",
+          "detail": "Calcula o proprietário."
+        },
+        {
+          "id": "a",
+          "label": "Cache A",
+          "technology": "redis",
+          "role": "Armazenamento",
+          "detail": "Recebe parte das chaves."
+        },
+        {
+          "id": "b",
+          "label": "Cache B",
+          "technology": "redis",
+          "role": "Armazenamento",
+          "detail": "Recebe outra parte."
+        }
+      ],
+      "edges": [
+        {
+          "from": "api",
+          "to": "ring",
+          "label": "Hash da chave"
+        },
+        {
+          "from": "ring",
+          "to": "a",
+          "label": "Próxima posição"
+        },
+        {
+          "from": "ring",
+          "to": "b",
+          "label": "Próxima posição"
+        }
+      ]
+    }
+  },
+  {
+    "id": "bloom-filter",
+    "name": "Filtro de Bloom",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "probabilidade",
+      "cache",
+      "índices",
+      "Redis"
+    ],
+    "summary": "Usa poucos bits para descartar consultas certamente ausentes, aceitando falsos positivos sob condições controladas.",
+    "overview": "Um filtro de Bloom representa um conjunto com posições de bits calculadas por funções de hash. Se alguma posição necessária estiver apagada, o item não foi inserido nesse filtro; se todas estiverem acesas, ele pode existir e precisa de verificação no armazenamento autoritativo. A ausência de falsos negativos depende de manter o filtro completo, correto e sem remoção indevida de bits. Um filtro atrasado em relação ao banco pode negar um item real, mesmo que a estrutura matemática esteja funcionando perfeitamente.",
+    "when": [
+      "Uma parcela importante das consultas busca identificadores inexistentes e cada acesso ao armazenamento custa significativamente mais que consultar o filtro.",
+      "O conjunto pode ser carregado e atualizado de modo compatível com a garantia de ausência exigida pela aplicação."
+    ],
+    "benefits": [
+      "Reduz consultas negativas usando memória menor que um conjunto completo de identificadores.",
+      "Permite escolher a probabilidade alvo de falsos positivos conforme capacidade e custo das verificações restantes."
+    ],
+    "tradeoffs": [
+      "Respostas positivas sempre precisam de confirmação quando a decisão exige certeza; o filtro não guarda o valor do registro.",
+      "O filtro tradicional não suporta apagar bits de um item com segurança, pois outros itens podem depender das mesmas posições."
+    ],
+    "avoid": [
+      "Evite usá-lo sozinho para autorização, cobrança ou deduplicação sem perda: um falso positivo não prova existência."
+    ],
+    "steps": [
+      {
+        "title": "Medir negativas",
+        "detail": "Calcule a fração de buscas ausentes e o custo evitável. Um filtro não compensa quando quase todas as consultas encontram dados."
+      },
+      {
+        "title": "Dimensionar estrutura",
+        "detail": "Escolha capacidade e taxa de falso positivo. Planeje expansão ou reconstrução antes de ultrapassar a carga projetada."
+      },
+      {
+        "title": "Coordenar atualização",
+        "detail": "Defina inicialização, inclusões e troca de versão. Durante reconstrução ou atraso, consulte a origem para evitar negativas indevidas."
+      },
+      {
+        "title": "Auditar resultados",
+        "detail": "Amostre negativas contra a origem e acompanhe falsos positivos e saturação. Diferencie erro de sincronização de comportamento probabilístico."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from hashlib import sha256\n\nbits = bytearray(128)\n\ndef posicoes(valor):\n    return [int.from_bytes(sha256(f'{i}:{valor}'.encode()).digest()[:4], 'big') % len(bits) for i in range(3)]\n\ndef adicionar(valor):\n    for p in posicoes(valor):\n        bits[p] = 1\n\ndef talvez_exista(valor):\n    return all(bits[p] for p in posicoes(valor))\n\nadicionar('pedido-42')\nassert talvez_exista('pedido-42')",
+      "explanation": "O exemplo usa um byte por posição para clareza, sem compactação real em bits. Ele demonstra inclusão e consulta, não dimensionamento de produção."
+    },
+    "sources": [
+      {
+        "label": "Redis — Bloom filter",
+        "url": "https://redis.io/docs/latest/develop/data-types/probabilistic/bloom-filter/"
+      },
+      {
+        "label": "Redis — BF.RESERVE",
+        "url": "https://redis.io/docs/latest/commands/bf.reserve/"
+      }
+    ],
+    "related": [
+      "cache-invalidation",
+      "deduplication",
+      "materialized-view"
+    ],
+    "prerequisites": [
+      "Armazenamento autoritativo disponível para confirmar positivos e auditar uma amostra das negativas.",
+      "Capacidade esperada do conjunto e processo definido para carga inicial e atualização contínua."
+    ],
+    "validation": [
+      "Insira todos os elementos de um conjunto conhecido e confirme que nenhum deles retorna ausência.",
+      "Consulte elementos ausentes suficientes para estimar falsos positivos e compare o resultado com o dimensionamento escolhido."
+    ],
+    "failureModes": [
+      "Uma reconstrução incompleta entra em produção e bloqueia consultas de registros que já existem no banco.",
+      "A implementação apaga bits ao remover um item e cria falsos negativos para outros que compartilham posições."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "api",
+          "label": "API de consulta",
+          "technology": "python",
+          "role": "Decisão",
+          "detail": "Verifica a condição do filtro."
+        },
+        {
+          "id": "filter",
+          "label": "Filtro de Bloom",
+          "technology": "redis",
+          "role": "Pré-filtro",
+          "detail": "Descarta negativas confiáveis."
+        },
+        {
+          "id": "db",
+          "label": "Banco autoritativo",
+          "technology": "postgresql",
+          "role": "Confirmação",
+          "detail": "Resolve os resultados positivos."
+        }
+      ],
+      "edges": [
+        {
+          "from": "api",
+          "to": "filter",
+          "label": "Talvez exista?"
+        },
+        {
+          "from": "api",
+          "to": "db",
+          "label": "Confirmar positivo ou contingência"
+        }
+      ]
+    }
+  },
+  {
+    "id": "materialized-view",
+    "name": "Visão materializada",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "PostgreSQL",
+      "consultas",
+      "agregação",
+      "consistência eventual"
+    ],
+    "summary": "Persiste o resultado de uma consulta para trocar custo de cálculo repetido por atualização controlada.",
+    "overview": "Uma visão materializada guarda resultados que normalmente seriam recalculados a cada consulta. Um painel de vendas pode ler totais por dia em vez de agregar milhões de itens em cada acesso. O resultado, porém, representa o último processo de atualização bem-sucedido. No PostgreSQL, uma materialized view não se atualiza automaticamente quando as tabelas de origem mudam. O projeto deve definir frequência, custo, concorrência e informação de frescor para que uma consulta rápida não seja confundida com uma consulta atualizada.",
+    "when": [
+      "A mesma agregação cara é consultada repetidamente e o produto aceita uma janela explícita de defasagem.",
+      "O volume do resultado agregado é muito menor que o conjunto de origem e a atualização cabe no orçamento operacional."
+    ],
+    "benefits": [
+      "Reduz trabalho repetido no caminho de leitura e permite índices apropriados sobre o resultado persistido.",
+      "Torna previsível o contrato de uma consulta analítica quando atualização e disponibilidade são operadas separadamente."
+    ],
+    "tradeoffs": [
+      "Refresh consome recursos e pode competir com a carga principal; reduzir o intervalo nem sempre melhora a experiência.",
+      "O modo concorrente do PostgreSQL tem requisitos de índice único e não elimina o custo de reconstruir o resultado."
+    ],
+    "avoid": [
+      "Evite apresentar uma materialização atrasada como fonte autoritativa para disponibilidade de estoque ou aprovação financeira."
+    ],
+    "steps": [
+      {
+        "title": "Escolher consulta",
+        "detail": "Meça a consulta original e defina quais colunas e agrupamentos compõem o resultado necessário, evitando materializar dados sem uso."
+      },
+      {
+        "title": "Definir frescor",
+        "detail": "Estabeleça atraso máximo e comportamento quando uma atualização falhar. Exiba a referência temporal quando ela afeta decisões."
+      },
+      {
+        "title": "Criar índices",
+        "detail": "Adicione índices conforme os acessos; para refresh concorrente, atenda aos requisitos documentados de unicidade e população inicial."
+      },
+      {
+        "title": "Agendar atualização",
+        "detail": "Use um agendador externo com exclusão de execuções sobrepostas, métricas de duração e alertas por idade do último sucesso."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "CREATE MATERIALIZED VIEW vendas_por_dia AS\nSELECT dia, sum(total) AS total\nFROM venda_mv\nGROUP BY dia;\nCREATE UNIQUE INDEX vendas_por_dia_pk ON vendas_por_dia (dia);",
+      "explanation": "O exemplo pressupõe a tabela venda_mv criada no laboratório. O índice representa uma linha por dia e permite estudar a atualização concorrente."
+    },
+    "sources": [
+      {
+        "label": "PostgreSQL — Materialized views",
+        "url": "https://www.postgresql.org/docs/current/rules-materializedviews.html"
+      },
+      {
+        "label": "PostgreSQL — REFRESH MATERIALIZED VIEW",
+        "url": "https://www.postgresql.org/docs/current/sql-refreshmaterializedview.html"
+      }
+    ],
+    "related": [
+      "read-replica",
+      "cdc",
+      "event-carried-state-transfer"
+    ],
+    "prerequisites": [
+      "Consulta de origem validada e tolerância de defasagem acordada com quem utiliza o resultado.",
+      "Permissões para criar a visão e executar refresh; um agendador deve ser configurado separadamente."
+    ],
+    "validation": [
+      "Altere a origem e confirme que a visão mantém o resultado anterior até o refresh, tornando o contrato visível.",
+      "Meça leituras durante a atualização e verifique duração, bloqueios e impacto sobre a origem com o volume esperado."
+    ],
+    "failureModes": [
+      "O agendador falha silenciosamente e o painel continua mostrando dados antigos com aparência de normalidade.",
+      "Duas atualizações concorrentes disputam recursos e impedem que o trabalho termine dentro da janela planejada."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "origem",
+          "label": "Tabelas de origem",
+          "technology": "postgresql",
+          "role": "Escrita",
+          "detail": "Recebem transações do negócio."
+        },
+        {
+          "id": "job",
+          "label": "Agendador de refresh",
+          "technology": "python",
+          "role": "Atualização",
+          "detail": "Controla execução e frescor."
+        },
+        {
+          "id": "view",
+          "label": "Visão materializada",
+          "technology": "database",
+          "role": "Leitura",
+          "detail": "Guarda os totais calculados."
+        },
+        {
+          "id": "api",
+          "label": "Painel",
+          "technology": "service",
+          "role": "Consulta",
+          "detail": "Lê resultado e referência temporal."
+        }
+      ],
+      "edges": [
+        {
+          "from": "job",
+          "to": "origem",
+          "label": "Executar agregação"
+        },
+        {
+          "from": "origem",
+          "to": "view",
+          "label": "Persistir resultado"
+        },
+        {
+          "from": "api",
+          "to": "view",
+          "label": "Consultar totais"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Criar origem e resultado",
+        "detail": "Execute em um schema descartável; os nomes devem estar livres.",
+        "language": "sql",
+        "code": "CREATE TABLE venda_mv (id bigint PRIMARY KEY, dia date NOT NULL, total numeric(12,2) NOT NULL);\nINSERT INTO venda_mv VALUES (1, '2026-10-01', 100);\nCREATE MATERIALIZED VIEW laboratorio_mv AS SELECT dia, sum(total) AS total FROM venda_mv GROUP BY dia;\nCREATE UNIQUE INDEX laboratorio_mv_dia ON laboratorio_mv (dia);"
+      },
+      {
+        "title": "Observar defasagem",
+        "detail": "A origem passa a totalizar 150, enquanto a visão ainda contém 100.",
+        "language": "sql",
+        "code": "INSERT INTO venda_mv VALUES (2, '2026-10-01', 50);\nSELECT * FROM laboratorio_mv;"
+      },
+      {
+        "title": "Atualizar e conferir",
+        "detail": "Execute fora de outra transação de laboratório para manter o procedimento simples.",
+        "language": "sql",
+        "code": "REFRESH MATERIALIZED VIEW CONCURRENTLY laboratorio_mv;\nSELECT * FROM laboratorio_mv;"
+      }
+    ]
+  },
+  {
+    "id": "cdc",
+    "name": "Captura de alterações — CDC",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "PostgreSQL",
+      "Debezium",
+      "Kafka",
+      "integração"
+    ],
+    "summary": "Transforma alterações persistidas no banco em um fluxo consumível por índices, projeções e integrações.",
+    "overview": "CDC observa mudanças no armazenamento, frequentemente a partir do log transacional, sem exigir que cada consulta cliente descubra o que mudou. No PostgreSQL, logical decoding expõe alterações persistentes por um mecanismo de slots e plugins. Um conector como Debezium coordena snapshot inicial e continuidade do fluxo. Ainda é necessário interpretar operações, versões de esquema e exclusões. Uma alteração de coluna é um fato técnico do banco; ela não equivale automaticamente a um evento de negócio como PedidoAprovado.",
+    "when": [
+      "Índices de busca, análises ou cópias de leitura precisam acompanhar dados com atraso menor que exportações periódicas completas.",
+      "Existe um banco proprietário confiável e a equipe consegue operar retenção de log, permissões e contratos de mudança."
+    ],
+    "benefits": [
+      "Diminui a necessidade de varreduras frequentes procurando registros alterados e preserva informações de mudanças do armazenamento.",
+      "Permite alimentar consumidores independentes sem adicionar uma chamada síncrona a cada transação da aplicação."
+    ],
+    "tradeoffs": [
+      "Slots atrasados podem reter WAL e consumir disco; a integração participa da saúde operacional do banco de origem.",
+      "Snapshots, mudanças de esquema e retomada após falhas exigem tratamento explícito, inclusive de possíveis entregas repetidas."
+    ],
+    "avoid": [
+      "Evite expor diretamente todo o esquema interno como contrato público sem uma camada de interpretação e política de evolução."
+    ],
+    "steps": [
+      {
+        "title": "Definir escopo",
+        "detail": "Selecione tabelas, colunas e destinatários. Estabeleça identificadores estáveis e a representação das exclusões."
+      },
+      {
+        "title": "Preparar origem",
+        "detail": "Configure replicação lógica e permissões conforme o conector escolhido. Avalie o volume de WAL e os limites de retenção."
+      },
+      {
+        "title": "Conectar snapshot",
+        "detail": "Use o mecanismo documentado para combinar fotografia inicial e posição do log, evitando lacunas entre carga e streaming."
+      },
+      {
+        "title": "Operar consumidores",
+        "detail": "Persista progresso junto com efeitos quando possível, trate duplicações e monitore atraso, retenção e compatibilidade de esquema."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "SELECT slot_name, plugin, slot_type, active,\n       restart_lsn, confirmed_flush_lsn\nFROM pg_replication_slots;",
+      "explanation": "A consulta é observacional. Criar um slot sem consumidor pode reter WAL; o laboratório deixa sua criação e gerenciamento sob responsabilidade do conector escolhido."
+    },
+    "sources": [
+      {
+        "label": "PostgreSQL — Logical decoding concepts",
+        "url": "https://www.postgresql.org/docs/current/logicaldecoding-explanation.html"
+      },
+      {
+        "label": "Debezium — PostgreSQL connector",
+        "url": "https://debezium.io/documentation/reference/stable/connectors/postgresql.html"
+      }
+    ],
+    "related": [
+      "materialized-view",
+      "inbox",
+      "event-carried-state-transfer"
+    ],
+    "prerequisites": [
+      "Conector compatível com a versão do banco e uma identidade com privilégios mínimos documentados.",
+      "Capacidade para monitorar disco, retenção e progresso do consumidor desde o primeiro teste."
+    ],
+    "validation": [
+      "Insira, altere e remova registros durante o snapshot e confirme que o destino converge sem perder mudanças.",
+      "Pare o consumidor por um período controlado, observe retenção de WAL e teste retomada e duplicações antes de esgotar o disco."
+    ],
+    "failureModes": [
+      "Um consumidor abandonado mantém um slot ativo operacionalmente irrelevante que retém WAL indefinidamente.",
+      "Uma alteração de tipo chega a um consumidor antigo e interrompe a projeção, acumulando atraso sem alerta."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "db",
+          "label": "Banco de origem",
+          "technology": "postgresql",
+          "role": "Autoridade",
+          "detail": "Confirma as transações."
+        },
+        {
+          "id": "cdc",
+          "label": "Conector CDC",
+          "technology": "service",
+          "role": "Extração",
+          "detail": "Combina snapshot e posição do log."
+        },
+        {
+          "id": "stream",
+          "label": "Fluxo de mudanças",
+          "technology": "kafka",
+          "role": "Distribuição",
+          "detail": "Retém registros para consumidores."
+        },
+        {
+          "id": "proj",
+          "label": "Projeção",
+          "technology": "postgresql",
+          "role": "Destino",
+          "detail": "Aplica alterações com controle de versão."
+        }
+      ],
+      "edges": [
+        {
+          "from": "db",
+          "to": "cdc",
+          "label": "Decodificação lógica"
+        },
+        {
+          "from": "cdc",
+          "to": "stream",
+          "label": "Envelope de mudança"
+        },
+        {
+          "from": "stream",
+          "to": "proj",
+          "label": "Aplicação e progresso"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Inspecionar configuração",
+        "detail": "Execute como usuário autorizado; uma alteração de wal_level exige procedimento administrativo próprio.",
+        "language": "sql",
+        "code": "SHOW wal_level;\nSHOW max_replication_slots;\nSHOW max_wal_senders;"
+      },
+      {
+        "title": "Listar slots",
+        "detail": "Observe quais pertencem ao conector e quem está consumindo antes de modificar qualquer configuração.",
+        "language": "sql",
+        "code": "SELECT slot_name, slot_type, plugin, active, restart_lsn, confirmed_flush_lsn\nFROM pg_replication_slots;"
+      },
+      {
+        "title": "Medir retenção",
+        "detail": "Execute no primário. Bytes retidos devem ser acompanhados junto com capacidade de disco e estado do conector.",
+        "language": "sql",
+        "code": "SELECT slot_name,\n       pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn) AS bytes_retidos\nFROM pg_replication_slots\nWHERE slot_type = 'logical';"
+      }
+    ]
+  },
+  {
+    "id": "inbox",
+    "name": "Inbox transacional",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "mensageria",
+      "PostgreSQL",
+      "deduplicação",
+      "transações"
+    ],
+    "summary": "Registra a mensagem recebida e seus efeitos locais na mesma transação para tornar reentregas seguras.",
+    "overview": "Uma fila pode entregar novamente uma mensagem quando o consumidor confirma o banco e falha antes do acknowledgement. O inbox guarda uma identidade única da mensagem junto com a alteração de negócio na mesma transação. Na reentrega, a restrição de unicidade impede repetir aquele efeito local. O alcance da garantia é importante: enviar um SMS ou chamar uma API dentro desse processo não passa a ser atômico com o PostgreSQL. Efeitos externos precisam de um mecanismo complementar com sua própria estratégia de repetição.",
+    "when": [
+      "Consumidores recebem mensagens pelo menos uma vez e atualizam um banco transacional sob seu controle.",
+      "A falha entre commit e acknowledgement é possível e repetir a atualização alteraria o resultado do negócio."
+    ],
+    "benefits": [
+      "Transforma a duplicação de transporte em uma verificação persistente e observável, sem depender da memória do processo.",
+      "Permite confirmar a fila somente depois do commit, preservando segurança contra reinícios em pontos intermediários."
+    ],
+    "tradeoffs": [
+      "O registro cresce e requer retenção compatível com a janela máxima de reentrega e replay.",
+      "A identidade precisa ser estável entre tentativas; mensagens semanticamente duplicadas com IDs diferentes exigem outra regra."
+    ],
+    "avoid": [
+      "Evite gravar o inbox em uma transação e o efeito em outra: uma falha entre ambas pode perder ou duplicar o processamento."
+    ],
+    "steps": [
+      {
+        "title": "Definir identidade",
+        "detail": "Combine consumidor lógico e event_id quando o mesmo evento puder ser processado por vários assinantes independentes."
+      },
+      {
+        "title": "Criar restrição",
+        "detail": "Use uma chave única no banco. Não substitua atomicidade por uma consulta anterior seguida de inserção sem proteção."
+      },
+      {
+        "title": "Aplicar condicionalmente",
+        "detail": "Insira a identidade e execute a alteração apenas se a inserção ocorreu, dentro da mesma transação."
+      },
+      {
+        "title": "Confirmar depois",
+        "detail": "Após commit bem-sucedido, envie acknowledgement ao broker. Em falha ou resultado desconhecido, permita reentrega controlada."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "WITH nova AS (\n  INSERT INTO inbox_demo (consumidor, evento_id)\n  VALUES ('projecao', 'evt-1')\n  ON CONFLICT DO NOTHING\n  RETURNING evento_id\n)\nUPDATE contador_demo SET valor = valor + 1\nWHERE id = 1 AND EXISTS (SELECT 1 FROM nova);",
+      "explanation": "A instrução só incrementa quando a mensagem é nova. O laboratório cria as tabelas necessárias; use uma transação maior se houver outros efeitos locais."
+    },
+    "sources": [
+      {
+        "label": "PostgreSQL — INSERT ON CONFLICT",
+        "url": "https://www.postgresql.org/docs/current/sql-insert.html"
+      },
+      {
+        "label": "RabbitMQ — Consumer acknowledgements",
+        "url": "https://www.rabbitmq.com/docs/confirms"
+      }
+    ],
+    "related": [
+      "deduplication",
+      "dead-letter-queue",
+      "event-carried-state-transfer"
+    ],
+    "prerequisites": [
+      "Identificador de evento preservado pelo produtor e confirmação manual configurada no consumidor.",
+      "Todos os efeitos protegidos devem estar no mesmo banco e participar da mesma transação."
+    ],
+    "validation": [
+      "Entregue a mesma mensagem duas vezes e confirme uma única alteração no estado e um único registro de inbox.",
+      "Interrompa o consumidor depois do commit e antes do acknowledgement; a reentrega deve concluir sem repetir o efeito."
+    ],
+    "failureModes": [
+      "O código confirma a mensagem antes de persistir a transação e perde o efeito quando o processo cai.",
+      "A limpeza apaga identidades antes do prazo de replay e mensagens antigas voltam a alterar o estado."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "queue",
+          "label": "Fila",
+          "technology": "rabbitmq",
+          "role": "Entrega",
+          "detail": "Pode reenviar mensagens."
+        },
+        {
+          "id": "worker",
+          "label": "Consumidor",
+          "technology": "python",
+          "role": "Processamento",
+          "detail": "Controla transação e confirmação."
+        },
+        {
+          "id": "db",
+          "label": "Inbox e estado",
+          "technology": "postgresql",
+          "role": "Atomicidade",
+          "detail": "Guarda identidade e efeito juntos."
+        }
+      ],
+      "edges": [
+        {
+          "from": "queue",
+          "to": "worker",
+          "label": "Evento com ID"
+        },
+        {
+          "from": "worker",
+          "to": "db",
+          "label": "Transação única"
+        },
+        {
+          "from": "worker",
+          "to": "queue",
+          "label": "Ack após commit"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Criar estado do laboratório",
+        "detail": "Execute uma vez em um banco descartável.",
+        "language": "sql",
+        "code": "CREATE TABLE inbox_demo (consumidor text NOT NULL, evento_id text NOT NULL, PRIMARY KEY (consumidor, evento_id));\nCREATE TABLE contador_demo (id integer PRIMARY KEY, valor integer NOT NULL);\nINSERT INTO contador_demo VALUES (1, 0);"
+      },
+      {
+        "title": "Processar uma mensagem",
+        "detail": "Execute este bloco duas vezes com o mesmo evento para simular reentrega.",
+        "language": "sql",
+        "code": "BEGIN;\nWITH nova AS (INSERT INTO inbox_demo VALUES ('projecao', 'evt-1') ON CONFLICT DO NOTHING RETURNING evento_id)\nUPDATE contador_demo SET valor = valor + 1 WHERE id = 1 AND EXISTS (SELECT 1 FROM nova);\nCOMMIT;"
+      },
+      {
+        "title": "Verificar efeito único",
+        "detail": "O valor esperado é 1 mesmo após repetir o passo anterior.",
+        "language": "sql",
+        "code": "SELECT * FROM contador_demo;\nSELECT * FROM inbox_demo;"
+      }
+    ]
+  },
+  {
+    "id": "deduplication",
+    "name": "Deduplicação persistente",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "mensageria",
+      "identidade",
+      "PostgreSQL",
+      "concorrência"
+    ],
+    "summary": "Reconhece repetições por uma identidade estável e preserva um registro atômico da decisão de processamento.",
+    "overview": "Deduplicar significa decidir quais entregas representam o mesmo fato dentro de uma janela e de um domínio definidos. Um identificador de transporte, uma chave de negócio e um hash de conteúdo podem produzir resultados diferentes. Dois pedidos iguais no conteúdo podem ser compras legítimas distintas; o mesmo evento reenviado pode ter metadados diferentes. Por isso, a identidade deve vir de uma regra explícita. Uma restrição única resolve a corrida de inserção, mas a durabilidade do efeito depende de sua integração com a transação.",
+    "when": [
+      "Importações, webhooks ou mensagens podem repetir um fato já identificado pelo sistema de origem.",
+      "Existe uma definição de equivalência que permite distinguir repetição de duas operações legítimas com valores semelhantes."
+    ],
+    "benefits": [
+      "Evita trabalho repetido e oferece um histórico verificável das identidades observadas.",
+      "Uma restrição única no armazenamento coordena consumidores concorrentes sem depender de uma verificação em memória."
+    ],
+    "tradeoffs": [
+      "A retenção limita a janela de proteção; remover uma identidade torna uma repetição antiga novamente elegível.",
+      "Identificadores incorretos podem descartar dados legítimos, enquanto IDs renovados a cada tentativa tornam a deduplicação ineficaz."
+    ],
+    "avoid": [
+      "Evite deduplicar operações financeiras apenas pelo conteúdo ou confiar em um filtro probabilístico para descartar registros definitivamente."
+    ],
+    "steps": [
+      {
+        "title": "Definir equivalência",
+        "detail": "Escolha o escopo da chave, incluindo origem e consumidor quando necessário. Documente colisões e reprocessamentos intencionais."
+      },
+      {
+        "title": "Persistir decisão",
+        "detail": "Crie uma restrição única e insira de forma atômica. Use o resultado dessa inserção para decidir se há trabalho novo."
+      },
+      {
+        "title": "Vincular efeito",
+        "detail": "Combine a marcação com os efeitos locais na mesma transação ou represente estados de execução recuperáveis."
+      },
+      {
+        "title": "Definir retenção",
+        "detail": "Mantenha registros por tempo compatível com replay, disputas e atrasos. Meça duplicações para detectar defeitos do produtor."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "INSERT INTO recebimento_dedup (origem, identificador)\nVALUES ('parceiro-a', 'arquivo-2026-10-01')\nON CONFLICT (origem, identificador) DO NOTHING\nRETURNING origem, identificador;",
+      "explanation": "Uma linha retornada indica uma nova identidade; nenhuma linha indica repetição. O resultado não comprova que um efeito externo já foi concluído."
+    },
+    "sources": [
+      {
+        "label": "PostgreSQL — Unique constraints",
+        "url": "https://www.postgresql.org/docs/current/ddl-constraints.html"
+      },
+      {
+        "label": "PostgreSQL — INSERT",
+        "url": "https://www.postgresql.org/docs/current/sql-insert.html"
+      }
+    ],
+    "related": [
+      "inbox",
+      "bloom-filter",
+      "optimistic-locking"
+    ],
+    "prerequisites": [
+      "Identificadores de origem confiáveis e regra definida para reprocessamento autorizado.",
+      "Armazenamento durável com unicidade atômica e política de expiração conhecida."
+    ],
+    "validation": [
+      "Dispare duas inserções concorrentes da mesma chave e confirme que somente uma recebe a decisão de novidade.",
+      "Teste uma operação legítima com conteúdo idêntico e identificador diferente para garantir que não seja descartada indevidamente."
+    ],
+    "failureModes": [
+      "A aplicação faz SELECT seguido de INSERT sem restrição única e dois processos passam pela mesma verificação.",
+      "Uma marcação de sucesso é persistida antes do trabalho e um reinício faz o sistema descartar uma operação nunca concluída."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "source",
+          "label": "Origem",
+          "technology": "service",
+          "role": "Identidade",
+          "detail": "Preserva a chave entre tentativas."
+        },
+        {
+          "id": "worker",
+          "label": "Processador",
+          "technology": "python",
+          "role": "Decisão",
+          "detail": "Testa novidade atomicamente."
+        },
+        {
+          "id": "db",
+          "label": "Registro de identidades",
+          "technology": "postgresql",
+          "role": "Unicidade",
+          "detail": "Coordena inserções concorrentes."
+        }
+      ],
+      "edges": [
+        {
+          "from": "source",
+          "to": "worker",
+          "label": "Registro repetível"
+        },
+        {
+          "from": "worker",
+          "to": "db",
+          "label": "Inserção condicional"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Criar chave composta",
+        "detail": "A origem evita colisões entre parceiros que usam o mesmo número.",
+        "language": "sql",
+        "code": "CREATE TABLE recebimento_dedup (\n  origem text NOT NULL,\n  identificador text NOT NULL,\n  recebido_em timestamptz NOT NULL DEFAULT now(),\n  PRIMARY KEY (origem, identificador)\n);"
+      },
+      {
+        "title": "Inserir identidade",
+        "detail": "Execute duas vezes e compare a quantidade de linhas retornadas.",
+        "language": "sql",
+        "code": "INSERT INTO recebimento_dedup (origem, identificador)\nVALUES ('parceiro-a', 'arquivo-2026-10-01')\nON CONFLICT DO NOTHING RETURNING *;"
+      },
+      {
+        "title": "Testar escopo",
+        "detail": "A mesma identificação de outra origem é um registro distinto neste contrato.",
+        "language": "sql",
+        "code": "INSERT INTO recebimento_dedup (origem, identificador)\nVALUES ('parceiro-b', 'arquivo-2026-10-01');\nSELECT origem, identificador FROM recebimento_dedup ORDER BY origem;"
+      }
+    ]
+  },
+  {
+    "id": "dead-letter-queue",
+    "name": "Fila de mensagens não processadas — DLQ",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "RabbitMQ",
+      "mensageria",
+      "falhas",
+      "operação"
+    ],
+    "summary": "Isola mensagens que não podem continuar no fluxo normal e cria um caminho controlado de investigação e reprocessamento.",
+    "overview": "Uma DLQ recebe mensagens rejeitadas ou desviadas segundo políticas do broker. No RabbitMQ, uma dead-letter exchange encaminha essas mensagens a uma fila vinculada; exchange e fila não são o mesmo objeto. O objetivo é retirar itens problemáticos do caminho principal preservando contexto suficiente para corrigir sua causa. A DLQ não corrige payload, não garante por si só entrega sem perda e não deve virar armazenamento esquecido. O procedimento precisa definir responsáveis, prazo de retenção, alertas e critérios para replay.",
+    "when": [
+      "Mensagens inválidas ou falhas persistentes precisam ser isoladas para que consumidores continuem atendendo os itens saudáveis.",
+      "A operação consegue investigar causas, corrigir consumidores e reintroduzir mensagens sem repetir efeitos indevidos."
+    ],
+    "benefits": [
+      "Evita que um item impossível de processar fique circulando indefinidamente e consumindo toda a capacidade.",
+      "Preserva exemplos de falhas reais para diagnóstico, correção e auditoria com acesso controlado."
+    ],
+    "tradeoffs": [
+      "A segurança da transferência depende do tipo de fila e da configuração do broker; confirme as garantias oferecidas.",
+      "Reprocessamento precisa controlar velocidade, identidade e versão do esquema para não repetir o incidente original."
+    ],
+    "avoid": [
+      "Evite reencaminhar automaticamente toda a DLQ para a origem sem limite de tentativas e sem corrigir a causa."
+    ],
+    "steps": [
+      {
+        "title": "Classificar falhas",
+        "detail": "Separe erro transitório de erro permanente. Defina quantas tentativas cabem no orçamento antes de desviar."
+      },
+      {
+        "title": "Criar destino",
+        "detail": "Declare a exchange de erro, a fila durável e o binding. Prefira políticas operacionais quando o ambiente permitir alterações sem redeclaração."
+      },
+      {
+        "title": "Preservar contexto",
+        "detail": "Mantenha identidade, origem e motivo acessíveis. Proteja payloads sensíveis e não registre segredos indiscriminadamente."
+      },
+      {
+        "title": "Operar replay",
+        "detail": "Investigue amostras, corrija a causa e reenvie em lotes pequenos. Confirme progresso e mantenha rastreabilidade da ação."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import pika\n\nconexao = pika.BlockingConnection(pika.ConnectionParameters('localhost'))\ncanal = conexao.channel()\ncanal.exchange_declare(exchange='erros', exchange_type='direct', durable=True)\ncanal.queue_declare(queue='tarefas.dlq', durable=True)\ncanal.queue_bind(queue='tarefas.dlq', exchange='erros', routing_key='falha')\nconexao.close()",
+      "explanation": "Requer pika instalado e RabbitMQ local. O código cria somente o destino; configurar a origem e decidir quando rejeitar são passos separados."
+    },
+    "sources": [
+      {
+        "label": "RabbitMQ — Dead letter exchanges",
+        "url": "https://www.rabbitmq.com/docs/dlx"
+      },
+      {
+        "label": "RabbitMQ — Negative acknowledgements",
+        "url": "https://www.rabbitmq.com/docs/nack"
+      }
+    ],
+    "related": [
+      "inbox",
+      "competing-consumers",
+      "backpressure"
+    ],
+    "prerequisites": [
+      "RabbitMQ local ou ambiente de teste, biblioteca pika instalada e permissão para declarar os objetos.",
+      "Política de retenção e responsável por responder aos alertas de mensagens desviadas."
+    ],
+    "validation": [
+      "Publique um payload inválido e confirme sua chegada à DLQ com identidade e motivo rastreáveis.",
+      "Corrija o consumidor, reenvie uma amostra e confirme que reentregas não duplicam alterações já concluídas."
+    ],
+    "failureModes": [
+      "A exchange de erro ou seu binding não existe e a configuração não oferece a segurança de transferência esperada.",
+      "O replay em massa sobrecarrega a origem ou cria um ciclo de rejeição que nunca termina."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "q",
+          "label": "Fila principal",
+          "technology": "rabbitmq",
+          "role": "Entrega",
+          "detail": "Contém tarefas normais."
+        },
+        {
+          "id": "w",
+          "label": "Consumidor",
+          "technology": "python",
+          "role": "Validação",
+          "detail": "Decide rejeitar sem requeue."
+        },
+        {
+          "id": "dlx",
+          "label": "Exchange de erro",
+          "technology": "rabbitmq",
+          "role": "Roteamento",
+          "detail": "Direciona mensagens rejeitadas."
+        },
+        {
+          "id": "dlq",
+          "label": "DLQ",
+          "technology": "queue",
+          "role": "Investigação",
+          "detail": "Retém falhas para análise."
+        }
+      ],
+      "edges": [
+        {
+          "from": "q",
+          "to": "w",
+          "label": "Mensagem"
+        },
+        {
+          "from": "w",
+          "to": "q",
+          "label": "Nack sem requeue"
+        },
+        {
+          "from": "q",
+          "to": "dlx",
+          "label": "Dead-letter"
+        },
+        {
+          "from": "dlx",
+          "to": "dlq",
+          "label": "Binding de falha"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Criar destino",
+        "detail": "Execute no mesmo interpretador Python dos próximos passos, com pika e RabbitMQ disponíveis.",
+        "language": "python",
+        "code": "import pika\nc = pika.BlockingConnection(pika.ConnectionParameters('localhost'))\nch = c.channel()\nch.exchange_declare(exchange='lab.erros', exchange_type='direct', durable=True)\nch.queue_declare(queue='lab.dlq', durable=True)\nch.queue_bind(queue='lab.dlq', exchange='lab.erros', routing_key='falha')"
+      },
+      {
+        "title": "Criar origem e publicar",
+        "detail": "Argumentos fixos são convenientes no laboratório; em produção, avalie políticas do broker.",
+        "language": "python",
+        "code": "ch.queue_declare(queue='lab.origem', durable=True, arguments={'x-dead-letter-exchange': 'lab.erros', 'x-dead-letter-routing-key': 'falha'})\nch.basic_publish(exchange='', routing_key='lab.origem', body=b'invalido')"
+      },
+      {
+        "title": "Rejeitar e inspecionar",
+        "detail": "O encaminhamento pode levar alguns instantes. O trecho consulta por até cerca de dois segundos e confirma a mensagem quando ela aparece.",
+        "language": "python",
+        "code": "metodo, propriedades, corpo = ch.basic_get('lab.origem', auto_ack=False)\nif metodo:\n    ch.basic_nack(metodo.delivery_tag, requeue=False)\ncorpo_dlq = None\nfor _ in range(20):\n    c.process_data_events(time_limit=0.1)\n    metodo_dlq, propriedades_dlq, corpo_dlq = ch.basic_get('lab.dlq', auto_ack=False)\n    if metodo_dlq:\n        ch.basic_ack(metodo_dlq.delivery_tag)\n        break\nprint(corpo_dlq)\nc.close()"
+      }
+    ]
+  },
+  {
+    "id": "competing-consumers",
+    "name": "Consumidores concorrentes",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "RabbitMQ",
+      "filas",
+      "throughput",
+      "workers"
+    ],
+    "summary": "Vários trabalhadores compartilham uma fila para distribuir tarefas, controlando confirmação e quantidade de trabalho em andamento.",
+    "overview": "Consumidores concorrentes retiram tarefas de uma mesma fila lógica para dividir processamento. Uma mensagem é entregue a um consumidor por vez nesse modelo, mas pode reaparecer após falha antes da confirmação. A escala depende do gargalo real: multiplicar workers não aumenta a capacidade de um banco já saturado. A ordem de conclusão também pode diferir da ordem de entrada, porque tarefas possuem durações diferentes. Se uma chave exige sequência estrita, ela precisa de uma estratégia de particionamento ou serialização própria.",
+    "when": [
+      "Tarefas podem ser processadas independentemente e o backlog cresce porque um trabalhador não oferece capacidade suficiente.",
+      "O processamento tolera reentrega e possui um limite conhecido de concorrência seguro para suas dependências."
+    ],
+    "benefits": [
+      "Permite acrescentar trabalhadores sem alterar os produtores nem encaminhar cada tarefa manualmente a um processo.",
+      "Falhas de um trabalhador podem ser absorvidas por reentrega, desde que a confirmação aconteça após o efeito durável."
+    ],
+    "tradeoffs": [
+      "Mais consumidores elevam pressão sobre conexões, CPU e dependências; o limite precisa considerar toda a cadeia.",
+      "Prefetch alto pode concentrar trabalho em um consumidor lento e aumentar a quantidade de mensagens em estado não confirmado."
+    ],
+    "avoid": [
+      "Evite usar consumidores concorrentes sem proteção contra duplicação quando cada tarefa gera um efeito que não pode se repetir."
+    ],
+    "steps": [
+      {
+        "title": "Dimensionar capacidade",
+        "detail": "Meça tempo de serviço e taxa de chegada. Estime concorrência e confirme limites do banco ou API mais restritiva."
+      },
+      {
+        "title": "Configurar entrega",
+        "detail": "Use confirmação manual e prefetch finito. Ajuste o valor com medições de distribuição e tempo de processamento."
+      },
+      {
+        "title": "Proteger efeitos",
+        "detail": "Implemente inbox ou outra estratégia compatível. Confirme somente depois de persistir o resultado da tarefa."
+      },
+      {
+        "title": "Escalar com sinais",
+        "detail": "Observe idade da mensagem mais antiga, backlog e latência das dependências, além de CPU dos trabalhadores."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import pika\n\nc = pika.BlockingConnection(pika.ConnectionParameters('localhost'))\nch = c.channel()\nch.queue_declare(queue='lab.trabalho', durable=True)\nch.basic_qos(prefetch_count=1)\n\ndef receber(canal, metodo, propriedades, corpo):\n    print(corpo.decode())  # Demonstração sem efeito de negócio persistente.\n    canal.basic_ack(metodo.delivery_tag)\n\nch.basic_consume(queue='lab.trabalho', on_message_callback=receber)\nch.start_consuming()",
+      "explanation": "Execute duas cópias para observar distribuição. O print não representa um processamento durável; substituí-lo exige tratar transação, falhas e duplicações."
+    },
+    "sources": [
+      {
+        "label": "RabbitMQ — Work queues",
+        "url": "https://www.rabbitmq.com/tutorials/tutorial-two-python"
+      },
+      {
+        "label": "Microsoft — Competing consumers",
+        "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/competing-consumers"
+      }
+    ],
+    "related": [
+      "inbox",
+      "backpressure",
+      "dead-letter-queue"
+    ],
+    "prerequisites": [
+      "Biblioteca pika e RabbitMQ acessível no laboratório; a fila deve ter argumentos compatíveis em todos os processos.",
+      "Métricas do destino e uma estratégia de processamento repetível antes de aumentar o número de consumidores."
+    ],
+    "validation": [
+      "Execute dois trabalhadores com tarefas de durações distintas e observe distribuição, mensagens não confirmadas e ordem de conclusão.",
+      "Interrompa um trabalhador durante uma tarefa e confirme reentrega sem perda nem duplicação do efeito local protegido."
+    ],
+    "failureModes": [
+      "Aumentar workers esgota conexões do banco, reduz throughput e cria um ciclo de escalonamento contraproducente.",
+      "Uma tarefa lenta segura muitas mensagens pré-carregadas enquanto outros trabalhadores ficam sem itens disponíveis."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "producer",
+          "label": "Produtor",
+          "technology": "service",
+          "role": "Entrada",
+          "detail": "Publica tarefas independentes."
+        },
+        {
+          "id": "queue",
+          "label": "Fila compartilhada",
+          "technology": "rabbitmq",
+          "role": "Distribuição",
+          "detail": "Entrega a um trabalhador por vez."
+        },
+        {
+          "id": "w1",
+          "label": "Worker A",
+          "technology": "python",
+          "role": "Execução",
+          "detail": "Confirma após persistência."
+        },
+        {
+          "id": "w2",
+          "label": "Worker B",
+          "technology": "python",
+          "role": "Execução",
+          "detail": "Divide a carga."
+        }
+      ],
+      "edges": [
+        {
+          "from": "producer",
+          "to": "queue",
+          "label": "Publicar"
+        },
+        {
+          "from": "queue",
+          "to": "w1",
+          "label": "Entrega"
+        },
+        {
+          "from": "queue",
+          "to": "w2",
+          "label": "Entrega"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Preparar conexão",
+        "detail": "Execute no mesmo interpretador dos dois próximos passos. Use outro terminal para executar os consumidores do exemplo principal.",
+        "language": "python",
+        "code": "import pika\nc = pika.BlockingConnection(pika.ConnectionParameters('localhost'))\nch = c.channel()\nch.queue_declare(queue='lab.trabalho', durable=True)\nch.confirm_delivery()"
+      },
+      {
+        "title": "Publicar lote",
+        "detail": "Confirmações de publicação são distintas dos acknowledgements dos consumidores.",
+        "language": "python",
+        "code": "for numero in range(10):\n    ch.basic_publish(exchange='', routing_key='lab.trabalho', body=str(numero).encode(), properties=pika.BasicProperties(delivery_mode=2), mandatory=True)"
+      },
+      {
+        "title": "Inspecionar pendências",
+        "detail": "A quantidade pronta não inclui todas as mensagens já entregues e ainda não confirmadas; use também as métricas do broker.",
+        "language": "python",
+        "code": "estado = ch.queue_declare(queue='lab.trabalho', passive=True)\nprint('Prontas:', estado.method.message_count)\nprint('Consumidores:', estado.method.consumer_count)\nc.close()"
+      }
+    ]
+  },
+  {
+    "id": "publish-subscribe",
+    "name": "Publicação e assinatura",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "eventos",
+      "RabbitMQ",
+      "integração",
+      "assinaturas"
+    ],
+    "summary": "Distribui um fato publicado a assinantes independentes, cada um com seu próprio progresso e tratamento de falhas.",
+    "overview": "Em publicação e assinatura, faturamento e análise podem receber o mesmo evento sem que o produtor conheça seus endpoints. Para ambos processarem cada evento de forma independente, eles precisam de assinaturas ou filas distintas. Dois consumidores na mesma fila normalmente dividem o trabalho em vez de receber duas cópias. O modelo de retenção varia por tecnologia: uma exchange RabbitMQ distribui para filas vinculadas, enquanto um log Kafka mantém registros conforme retenção e permite grupos com posições próprias.",
+    "when": [
+      "Um mesmo acontecimento interessa a vários domínios com ritmos de evolução e disponibilidade diferentes.",
+      "O produtor deve publicar um contrato estável sem coordenar chamadas síncronas para todos os destinatários."
+    ],
+    "benefits": [
+      "Novos assinantes podem ser adicionados sem incorporar suas regras internas ao código do publicador.",
+      "Cada consumidor pode ter concorrência, alertas e tratamento de falhas adequados ao seu uso do evento."
+    ],
+    "tradeoffs": [
+      "Não existe automaticamente uma transação única entre todos os assinantes; eles podem observar e aplicar o fato em momentos diferentes.",
+      "Retenção, durabilidade e replay dependem do broker e da configuração, não apenas do nome pub/sub."
+    ],
+    "avoid": [
+      "Evite colocar consumidores com responsabilidades independentes na mesma fila esperando que cada um receba todos os eventos."
+    ],
+    "steps": [
+      {
+        "title": "Definir o fato",
+        "detail": "Nomeie o evento no passado e descreva sua identidade, versão e significado de negócio sem expor campos internos desnecessários."
+      },
+      {
+        "title": "Criar assinaturas",
+        "detail": "Dê a cada responsabilidade uma fila ou grupo apropriado. Dentro de uma assinatura, use concorrência somente para dividir o trabalho."
+      },
+      {
+        "title": "Garantir publicação",
+        "detail": "Estabeleça durabilidade e confirmação compatíveis com o broker. Trate o intervalo entre alteração do negócio e publicação."
+      },
+      {
+        "title": "Governar evolução",
+        "detail": "Teste compatibilidade de novos campos, exclusão de consumidores e reprocessamento. Observe atraso e falhas por assinatura."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import pika\n\nc = pika.BlockingConnection(pika.ConnectionParameters('localhost'))\nch = c.channel()\nch.exchange_declare(exchange='pedidos.eventos', exchange_type='fanout', durable=True)\nfor fila in ('faturamento.eventos', 'analise.eventos'):\n    ch.queue_declare(queue=fila, durable=True)\n    ch.queue_bind(queue=fila, exchange='pedidos.eventos')\nc.close()",
+      "explanation": "A topologia dá uma fila a cada responsabilidade. A exchange fanout encaminha aos bindings existentes; ela não guarda um histórico próprio para futuros assinantes."
+    },
+    "sources": [
+      {
+        "label": "RabbitMQ — Publish/Subscribe",
+        "url": "https://www.rabbitmq.com/tutorials/tutorial-three-python"
+      },
+      {
+        "label": "Microsoft — Publisher subscriber",
+        "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/publisher-subscriber"
+      }
+    ],
+    "related": [
+      "competing-consumers",
+      "event-carried-state-transfer",
+      "inbox"
+    ],
+    "prerequisites": [
+      "Contrato de evento versionado e definição do que cada assinante precisa receber e reter.",
+      "Conhecimento das garantias de publicação e armazenamento da tecnologia selecionada."
+    ],
+    "validation": [
+      "Publique um evento com duas assinaturas ativas e confirme uma cópia processável em cada destino.",
+      "Desligue apenas um assinante e verifique se os outros continuam progredindo e se o atrasado consegue recuperar conforme a retenção."
+    ],
+    "failureModes": [
+      "Um consumidor novo espera eventos anteriores, mas foi ligado a uma topologia que não mantém histórico para ele.",
+      "Uma alteração incompatível do payload quebra vários assinantes simultaneamente e multiplica mensagens de erro."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "producer",
+          "label": "Serviço de pedidos",
+          "technology": "python",
+          "role": "Publicação",
+          "detail": "Emite um fato do domínio."
+        },
+        {
+          "id": "exchange",
+          "label": "Distribuidor de eventos",
+          "technology": "rabbitmq",
+          "role": "Roteamento",
+          "detail": "Encaminha para assinaturas."
+        },
+        {
+          "id": "billing",
+          "label": "Assinatura faturamento",
+          "technology": "queue",
+          "role": "Entrega",
+          "detail": "Mantém seu próprio backlog."
+        },
+        {
+          "id": "analytics",
+          "label": "Assinatura análise",
+          "technology": "queue",
+          "role": "Entrega",
+          "detail": "Evolui independentemente."
+        }
+      ],
+      "edges": [
+        {
+          "from": "producer",
+          "to": "exchange",
+          "label": "Pedido confirmado"
+        },
+        {
+          "from": "exchange",
+          "to": "billing",
+          "label": "Cópia para faturamento"
+        },
+        {
+          "from": "exchange",
+          "to": "analytics",
+          "label": "Cópia para análise"
+        }
+      ]
+    }
+  },
+  {
+    "id": "event-carried-state-transfer",
+    "name": "Transferência de estado por eventos",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "eventos",
+      "projeções",
+      "autonomia",
+      "consistência eventual"
+    ],
+    "summary": "Inclui estado suficiente nos eventos para que consumidores construam cópias locais e evitem consultas síncronas frequentes.",
+    "overview": "Um evento pode apenas avisar que algo mudou ou carregar os dados necessários para atualizar uma cópia. No segundo caso, um serviço de entregas mantém endereço e instruções de envio sem consultar clientes a cada pedido. Essa autonomia cria responsabilidade por versão, frescor e minimização de dados. O consumidor não se torna dono do cadastro original. Ele mantém uma projeção com finalidade definida, e precisa saber aplicar eventos fora de ordem, reconstruir o estado e representar exclusões ou restrições de uso.",
+    "when": [
+      "Um consumidor precisa consultar dados de outro domínio frequentemente e tolera uma cópia com atraso definido.",
+      "O produtor consegue publicar contratos de estado estáveis e existe um caminho para carga inicial ou reconstrução."
+    ],
+    "benefits": [
+      "Reduz dependência síncrona do proprietário durante o atendimento de consultas locais.",
+      "Permite modelos de leitura específicos, contendo apenas os campos necessários para a responsabilidade do consumidor."
+    ],
+    "tradeoffs": [
+      "Cópias aumentam superfície de governança, retenção e correção; excluir dados na origem não apaga automaticamente todos os destinos.",
+      "Eventos maiores e reconstruções exigem capacidade de transporte e armazenamento, além de controle de versão por entidade."
+    ],
+    "avoid": [
+      "Evite replicar todos os campos por conveniência ou usar uma projeção atrasada para uma decisão que exige confirmação atual do proprietário."
+    ],
+    "steps": [
+      {
+        "title": "Definir projeção",
+        "detail": "Liste os campos estritamente necessários, sua finalidade e a tolerância de atraso. Mantenha o proprietário explícito."
+      },
+      {
+        "title": "Versionar entidade",
+        "detail": "Inclua uma versão monotônica por entidade e regras para criação, alteração e remoção. Não dependa apenas da ordem de chegada."
+      },
+      {
+        "title": "Aplicar condicionalmente",
+        "detail": "Atualize a projeção somente quando a versão recebida for mais recente e trate duplicações de forma segura."
+      },
+      {
+        "title": "Planejar reconstrução",
+        "detail": "Combine snapshot e eventos sem lacunas, acompanhe atraso e forneça procedimento de reparo por entidade ou conjunto."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "INSERT INTO cliente_projecao (id, nome, versao)\nVALUES (42, 'Cliente exemplo', 7)\nON CONFLICT (id) DO UPDATE\nSET nome = EXCLUDED.nome, versao = EXCLUDED.versao\nWHERE cliente_projecao.versao < EXCLUDED.versao;",
+      "explanation": "Pressupõe uma tabela com id único, nome e versao bigint. A condição impede que a versão 6 sobrescreva a 7, mas exclusões precisam de tombstone ou regra equivalente."
+    },
+    "sources": [
+      {
+        "label": "Microsoft — Materialized view pattern",
+        "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/materialized-view"
+      },
+      {
+        "label": "Apache Kafka — Design and delivery semantics",
+        "url": "https://kafka.apache.org/42/design/design/"
+      }
+    ],
+    "related": [
+      "materialized-view",
+      "publish-subscribe",
+      "cdc",
+      "inbox"
+    ],
+    "prerequisites": [
+      "Contrato com identidade, versão e semântica de exclusão, além de política para dados sensíveis.",
+      "Fonte para carga inicial e retenção suficiente para alcançar o ponto atual após uma interrupção."
+    ],
+    "validation": [
+      "Entregue versões 7, 6 e 7 da mesma entidade e confirme que a projeção continua na versão 7.",
+      "Remova uma entidade e depois reentregue um evento antigo; a política de tombstone deve impedir seu reaparecimento indevido."
+    ],
+    "failureModes": [
+      "Uma projeção aceita qualquer evento recebido e substitui estado recente por uma versão antiga atrasada.",
+      "O consumidor perde a janela de retenção e tenta continuar sem reconstrução, deixando lacunas permanentes."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "owner",
+          "label": "Proprietário do cadastro",
+          "technology": "python",
+          "role": "Autoridade",
+          "detail": "Emite versões de estado."
+        },
+        {
+          "id": "stream",
+          "label": "Eventos versionados",
+          "technology": "kafka",
+          "role": "Transporte",
+          "detail": "Preserva eventos conforme retenção."
+        },
+        {
+          "id": "consumer",
+          "label": "Aplicador da projeção",
+          "technology": "nodejs",
+          "role": "Validação",
+          "detail": "Compara versão e identidade."
+        },
+        {
+          "id": "local",
+          "label": "Cópia local",
+          "technology": "postgresql",
+          "role": "Consulta",
+          "detail": "Atende o domínio consumidor."
+        }
+      ],
+      "edges": [
+        {
+          "from": "owner",
+          "to": "stream",
+          "label": "Estado necessário"
+        },
+        {
+          "from": "stream",
+          "to": "consumer",
+          "label": "Versão por entidade"
+        },
+        {
+          "from": "consumer",
+          "to": "local",
+          "label": "Upsert condicional"
+        }
+      ]
+    }
+  },
+  {
+    "id": "backpressure",
+    "name": "Backpressure",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "fluxo",
+      "filas",
+      "Python",
+      "capacidade"
+    ],
+    "summary": "Faz o produtor respeitar a capacidade do consumidor, limitando trabalho pendente e propagando pressão para trás.",
+    "overview": "Quando o produtor é mais rápido que o consumidor, algum recurso acumula trabalho: memória, disco, conexões ou tempo de espera. Backpressure torna esse limite explícito e faz o produtor esperar ou reduzir sua emissão. Uma fila limitada em memória é uma demonstração simples; prefetch em um broker limita mensagens entregues e ainda não confirmadas. Os limites precisam existir ao longo da cadeia. Criar tarefas ilimitadas que aguardam uma fila cheia apenas desloca o acúmulo para outro lugar.",
+    "when": [
+      "Uma etapa consegue produzir mais rápido do que a seguinte por períodos significativos e o trabalho pode aguardar dentro de um orçamento.",
+      "O sistema precisa manter memória e concorrência previsíveis mesmo quando um consumidor ou dependência fica lento."
+    ],
+    "benefits": [
+      "Evita que buffers cresçam sem controle e preserva capacidade de recuperação depois de uma desaceleração.",
+      "Expõe a diferença entre taxa de chegada e capacidade de serviço por métricas de ocupação e tempo de espera."
+    ],
+    "tradeoffs": [
+      "A pressão pode aumentar latência ou alcançar o cliente; é necessário definir até quando esperar e quando rejeitar.",
+      "Nem todo produtor externo aceita reduzir velocidade, exigindo combinar controle de fluxo com armazenamento durável ou descarte explícito."
+    ],
+    "avoid": [
+      "Evite interpretar uma fila grande como capacidade infinita: o prazo de execução e o custo de armazenamento continuam limitados."
+    ],
+    "steps": [
+      {
+        "title": "Localizar acúmulo",
+        "detail": "Identifique buffers, tarefas, conexões e mensagens não confirmadas entre as etapas. Meça limites reais de cada um."
+      },
+      {
+        "title": "Definir capacidade",
+        "detail": "Escolha tamanho de fila e concorrência usando tempo de serviço e latência aceitável, não apenas memória disponível."
+      },
+      {
+        "title": "Propagar espera",
+        "detail": "Use operações bloqueantes ou assíncronas aguardáveis. Garanta que o produtor aguarde a admissão antes de criar mais trabalho."
+      },
+      {
+        "title": "Planejar saturação",
+        "detail": "Combine prazo máximo, sinalização de sobrecarga e observabilidade. A recuperação não deve disparar uma avalanche de tarefas acumuladas."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import asyncio\n\nasync def executar():\n    fila = asyncio.Queue(maxsize=2)\n    async def consumidor():\n        for _ in range(5):\n            item = await fila.get()\n            await asyncio.sleep(0.05)\n            print(item)\n            fila.task_done()\n    trabalhador = asyncio.create_task(consumidor())\n    for item in range(5):\n        await fila.put(item)\n    await fila.join()\n    await trabalhador\n\nasyncio.run(executar())",
+      "explanation": "O produtor aguarda quando há dois itens pendentes. O exemplo é local e não fornece persistência nem recuperação depois de um processo encerrado."
+    },
+    "sources": [
+      {
+        "label": "Python — asyncio queues",
+        "url": "https://docs.python.org/3/library/asyncio-queue.html"
+      },
+      {
+        "label": "RabbitMQ — Consumer prefetch",
+        "url": "https://www.rabbitmq.com/docs/consumer-prefetch"
+      }
+    ],
+    "related": [
+      "load-shedding",
+      "competing-consumers",
+      "timeout-deadline"
+    ],
+    "prerequisites": [
+      "Medições de taxa de chegada, tempo de processamento e limite de latência para cada etapa.",
+      "Um protocolo ou API que permita aguardar capacidade, reduzir emissão ou comunicar rejeição."
+    ],
+    "validation": [
+      "Aumente a taxa do produtor e confirme que memória e trabalho em andamento permanecem limitados.",
+      "Atrase o consumidor e acompanhe a propagação da espera até a entrada, incluindo os prazos máximos definidos."
+    ],
+    "failureModes": [
+      "O produtor cria uma tarefa por item antes de aguardar capacidade e acumula milhares de corrotinas na memória.",
+      "Uma etapa possui buffer ilimitado e neutraliza os limites das demais, escondendo atraso até o sistema esgotar recursos."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "producer",
+          "label": "Produtor",
+          "technology": "python",
+          "role": "Emissão",
+          "detail": "Aguarda capacidade antes de avançar."
+        },
+        {
+          "id": "buffer",
+          "label": "Buffer limitado",
+          "technology": "queue",
+          "role": "Admissão",
+          "detail": "Guarda somente o limite permitido."
+        },
+        {
+          "id": "consumer",
+          "label": "Consumidor",
+          "technology": "python",
+          "role": "Execução",
+          "detail": "Libera espaço ao concluir."
+        }
+      ],
+      "edges": [
+        {
+          "from": "producer",
+          "to": "buffer",
+          "label": "Put aguardável"
+        },
+        {
+          "from": "buffer",
+          "to": "consumer",
+          "label": "Get"
+        },
+        {
+          "from": "consumer",
+          "to": "producer",
+          "label": "Pressão de capacidade"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Criar buffer limitado",
+        "detail": "Execute os três trechos no mesmo interpretador Python; os dois primeiros apenas definem objetos e funções.",
+        "language": "python",
+        "code": "import asyncio\nfila = asyncio.Queue(maxsize=2)"
+      },
+      {
+        "title": "Definir consumidor",
+        "detail": "task_done fica em finally para manter a contagem da fila, mas um erro real ainda exige política de falha.",
+        "language": "python",
+        "code": "async def consumir():\n    for _ in range(4):\n        item = await fila.get()\n        try:\n            await asyncio.sleep(0.05)\n            print('processado', item)\n        finally:\n            fila.task_done()"
+      },
+      {
+        "title": "Executar produtor",
+        "detail": "O await de put é o ponto em que a pressão alcança o produtor.",
+        "language": "python",
+        "code": "async def principal():\n    tarefa = asyncio.create_task(consumir())\n    for item in range(4):\n        await fila.put(item)\n    await fila.join()\n    await tarefa\n\nasyncio.run(principal())"
+      }
+    ]
+  },
+  {
+    "id": "load-shedding",
+    "name": "Descarte controlado de carga",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "resiliência",
+      "sobrecarga",
+      "admissão",
+      "latência"
+    ],
+    "summary": "Recusa parte do trabalho antes de consumir recursos críticos para preservar respostas úteis durante sobrecarga.",
+    "overview": "Quando a chegada excede a capacidade sustentável, aceitar tudo pode fazer todas as requisições expirarem após gastar recursos. Load shedding rejeita trabalho cedo, usando limites de concorrência, ocupação ou orçamento de latência. A decisão deve ocorrer antes do gargalo e distinguir prioridades de negócio quando isso for apropriado. O objetivo é maximizar trabalho útil concluído, não apenas manter um indicador de disponibilidade aparente. Rejeições precisam ser observáveis e clientes devem evitar repetir imediatamente em massa.",
+    "when": [
+      "Testes mostram colapso de latência ou throughput depois de um ponto de saturação e esperar mais não resolve a falta de capacidade.",
+      "Existem operações dispensáveis, prioridades ou clientes capazes de reagir a uma resposta explícita de sobrecarga."
+    ],
+    "benefits": [
+      "Protege recursos essenciais e reduz o custo de processar requisições que já não cumpririam seu prazo.",
+      "Pode preservar fluxos prioritários durante picos, mantendo a degradação previsível em vez de espalhar exaustão."
+    ],
+    "tradeoffs": [
+      "Parte das solicitações será recusada, exigindo contrato claro e métricas que não escondam a experiência dos usuários.",
+      "Limites estáticos mal dimensionados desperdiçam capacidade ou rejeitam tarde demais; adaptação também precisa de estabilidade."
+    ],
+    "avoid": [
+      "Evite descartar silenciosamente uma operação já confirmada ao cliente ou prometer sucesso antes de garantir sua aceitação durável."
+    ],
+    "steps": [
+      {
+        "title": "Encontrar saturação",
+        "detail": "Execute carga crescente e localize a região em que latência e erros sobem enquanto trabalho útil deixa de crescer."
+      },
+      {
+        "title": "Definir admissão",
+        "detail": "Limite concorrência ou custo antes do recurso escasso. Considere classes de serviço sem permitir que a classificação seja manipulada."
+      },
+      {
+        "title": "Comunicar recusa",
+        "detail": "Retorne um erro apropriado ao protocolo, com orientação de espera quando possível. Diferencie sobrecarga temporária de validação inválida."
+      },
+      {
+        "title": "Avaliar recuperação",
+        "detail": "Teste picos e redução de carga. Confirme que rejeições diminuem sem oscilações e sem tempestade de novas tentativas."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from queue import Queue, Full\n\npendentes = Queue(maxsize=2)\n\ndef admitir(tarefa):\n    try:\n        pendentes.put_nowait(tarefa)\n        return True\n    except Full:\n        return False\n\nprint([admitir(i) for i in range(3)])",
+      "explanation": "A saída inclui uma recusa porque o buffer está cheio. Em um servidor, essa decisão deve ser integrada ao protocolo e à durabilidade exigida pelo trabalho."
+    },
+    "sources": [
+      {
+        "label": "AWS — Using load shedding to avoid overload",
+        "url": "https://aws.amazon.com/builders-library/using-load-shedding-to-avoid-overload/"
+      },
+      {
+        "label": "Python — Queue",
+        "url": "https://docs.python.org/3/library/queue.html"
+      }
+    ],
+    "related": [
+      "backpressure",
+      "timeout-deadline",
+      "competing-consumers"
+    ],
+    "prerequisites": [
+      "Teste de capacidade com métricas de respostas úteis, latência e ocupação do recurso limitante.",
+      "Política de rejeição e comportamento de cliente definidos antes de ativar descarte em produção."
+    ],
+    "validation": [
+      "Aplique carga acima do limite e confira que o throughput útil permanece estável enquanto uma parcela é rejeitada rapidamente.",
+      "Observe clientes reais ou simulados para garantir que respostas de sobrecarga não provoquem repetição imediata sincronizada."
+    ],
+    "failureModes": [
+      "A admissão ocorre depois de abrir conexões ou executar consultas caras, quando os recursos já foram consumidos.",
+      "Uma classe de trabalho sem limite ocupa toda a capacidade e impede que a prioridade configurada funcione na prática."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Clientes",
+          "technology": "client",
+          "role": "Demanda",
+          "detail": "Podem exceder a capacidade."
+        },
+        {
+          "id": "gate",
+          "label": "Controle de admissão",
+          "technology": "python",
+          "role": "Proteção",
+          "detail": "Aceita ou recusa cedo."
+        },
+        {
+          "id": "workers",
+          "label": "Trabalhadores",
+          "technology": "service",
+          "role": "Execução",
+          "detail": "Processam o volume admitido."
+        },
+        {
+          "id": "db",
+          "label": "Dependência limitada",
+          "technology": "postgresql",
+          "role": "Gargalo",
+          "detail": "Recebe concorrência controlada."
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "gate",
+          "label": "Solicitação"
+        },
+        {
+          "from": "gate",
+          "to": "workers",
+          "label": "Somente admitidas"
+        },
+        {
+          "from": "workers",
+          "to": "db",
+          "label": "Carga limitada"
+        },
+        {
+          "from": "gate",
+          "to": "client",
+          "label": "Recusa explícita"
+        }
+      ]
+    }
+  },
+  {
+    "id": "timeout-deadline",
+    "name": "Timeouts e deadlines",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "latência",
+      "Python",
+      "resiliência",
+      "cancelamento"
+    ],
+    "summary": "Limita espera por etapa e propaga o orçamento total restante para evitar trabalho que já perdeu sua utilidade.",
+    "overview": "Timeout define quanto uma operação pode esperar; deadline define até quando o fluxo completo ainda faz sentido. Se cada uma de cinco chamadas recebe novamente dois segundos, o total pode ultrapassar bastante a expectativa de dois segundos do usuário. Um orçamento compartilhado reduz essa amplificação. Dentro de um processo, use relógio monotônico para medir intervalos. Entre máquinas, propague um formato de orçamento compatível com o protocolo e seus relógios, reservando tempo para devolver a resposta.",
+    "when": [
+      "Uma requisição atravessa várias dependências e precisa cumprir um limite total de latência.",
+      "Chamadas lentas prendem conexões ou tarefas por mais tempo que o valor do trabalho justifica."
+    ],
+    "benefits": [
+      "Limita ocupação de recursos em falhas silenciosas e torna a experiência de espera mais previsível.",
+      "Evita iniciar novas etapas quando já não existe tempo suficiente para concluir o fluxo útil."
+    ],
+    "tradeoffs": [
+      "Valores baixos demais produzem falhas em operações saudáveis com variação normal; valores altos retardam recuperação.",
+      "Cancelar a espera não desfaz automaticamente uma escrita remota, que pode ter sido concluída sem a resposta chegar."
+    ],
+    "avoid": [
+      "Evite repetir uma operação de efeito desconhecido apenas porque seu timeout expirou; consulte o resultado ou use uma identidade segura."
+    ],
+    "steps": [
+      {
+        "title": "Definir orçamento",
+        "detail": "Parta da latência esperada pelo usuário e distribua uma reserva para rede, dependências e resposta, usando medições de percentis."
+      },
+      {
+        "title": "Medir monotonicamente",
+        "detail": "Calcule o restante antes de cada etapa no mesmo processo. Não use horário civil para medir intervalos locais."
+      },
+      {
+        "title": "Propagar limite",
+        "detail": "Envie o orçamento pelo mecanismo documentado da tecnologia e faça downstream respeitá-lo, incluindo aquisição de conexões."
+      },
+      {
+        "title": "Tratar ambiguidade",
+        "detail": "Separe cancelamento, falha confirmada e resultado desconhecido. Registre onde o prazo foi consumido para orientar ajustes."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import asyncio\n\nasync def fluxo():\n    loop = asyncio.get_running_loop()\n    fim = loop.time() + 0.2\n    try:\n        async with asyncio.timeout_at(fim):\n            await asyncio.sleep(0.05)\n            await asyncio.sleep(0.3)\n    except TimeoutError:\n        print('Orçamento total esgotado')\n\nasyncio.run(fluxo())",
+      "explanation": "Requer Python 3.11 ou superior. O limite abrange as duas etapas; o cancelamento cooperativo não garante interrupção imediata de código bloqueante nem reversão de efeitos externos."
+    },
+    "sources": [
+      {
+        "label": "Python — asyncio timeouts",
+        "url": "https://docs.python.org/3/library/asyncio-task.html"
+      },
+      {
+        "label": "AWS — Timeouts, retries and backoff",
+        "url": "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/"
+      }
+    ],
+    "related": [
+      "backpressure",
+      "load-shedding",
+      "lease"
+    ],
+    "prerequisites": [
+      "SLO de latência e medições das dependências, incluindo conexão, DNS e negociação de transporte quando aplicável.",
+      "Bibliotecas com suporte a timeout e entendimento de como cada uma reage ao cancelamento."
+    ],
+    "validation": [
+      "Atrase uma etapa intermediária e confirme que o fluxo inteiro respeita o orçamento, sem reiniciar o relógio a cada chamada.",
+      "Faça uma escrita terminar no servidor após o cliente expirar e verifique se a aplicação trata o resultado como desconhecido."
+    ],
+    "failureModes": [
+      "Timeouts existem somente na leitura do socket e deixam abertura de conexão ou espera no pool sem limite.",
+      "Uma corrotina executa código bloqueante sem ceder controle e impede que o cancelamento ocorra no instante esperado."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Cliente",
+          "technology": "client",
+          "role": "Prazo",
+          "detail": "Estabelece a expectativa total."
+        },
+        {
+          "id": "api",
+          "label": "API",
+          "technology": "python",
+          "role": "Orçamento",
+          "detail": "Calcula o tempo restante."
+        },
+        {
+          "id": "service",
+          "label": "Dependência",
+          "technology": "service",
+          "role": "Execução",
+          "detail": "Respeita o limite recebido."
+        },
+        {
+          "id": "db",
+          "label": "Persistência",
+          "technology": "postgresql",
+          "role": "Efeito",
+          "detail": "Pode concluir apesar de resposta perdida."
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "api",
+          "label": "Solicitação com prazo"
+        },
+        {
+          "from": "api",
+          "to": "service",
+          "label": "Orçamento restante"
+        },
+        {
+          "from": "service",
+          "to": "db",
+          "label": "Operação limitada"
+        }
+      ]
+    }
+  },
+  {
+    "id": "lease",
+    "name": "Lease: posse com expiração",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "coordenação",
+      "expiração",
+      "PostgreSQL",
+      "liderança"
+    ],
+    "summary": "Concede autoridade temporária renovável, permitindo que outro participante assuma após a expiração.",
+    "overview": "Uma lease limita no tempo a posse de um recurso ou função. Um trabalhador adquire a concessão, renova enquanto consegue operar e perde a autoridade se não renovar. Isso evita depender de uma liberação explícita por um processo que pode morrer. Entretanto, o antigo dono pode apenas estar pausado e voltar a executar depois da expiração. Uma lease não interrompe fisicamente esse processo. Para recursos sensíveis, combine a posse temporária com verificação de autoridade ou fencing no destino.",
+    "when": [
+      "Jobs ou responsabilidades precisam ser assumidos novamente quando seu proprietário deixa de renovar a posse.",
+      "O mecanismo de coordenação oferece atualização atômica e a aplicação consegue parar de atuar ao perder sua autoridade."
+    ],
+    "benefits": [
+      "Permite recuperação automática depois de falhas sem esperar que o proprietário anterior libere voluntariamente o recurso.",
+      "Oferece uma representação observável de dono e validade, útil para investigar disputas e renovações atrasadas."
+    ],
+    "tradeoffs": [
+      "Expiração curta recupera rápido, mas aumenta sensibilidade a pausas e rede; expiração longa prolonga espera após falha.",
+      "Relógios, renovação e comunicação exigem hipóteses explícitas; um TTL não prova que o trabalho antigo deixou de existir."
+    ],
+    "avoid": [
+      "Evite confiar somente no prazo local do trabalhador para proteger uma escrita irreversível realizada depois de uma pausa longa."
+    ],
+    "steps": [
+      {
+        "title": "Definir autoridade",
+        "detail": "Escolha um serviço responsável pela validade da lease e uma identidade única por aquisição, não apenas pelo nome do processo."
+      },
+      {
+        "title": "Adquirir atomicamente",
+        "detail": "Crie ou substitua a concessão somente quando estiver livre ou expirada, usando comparação no armazenamento."
+      },
+      {
+        "title": "Renovar com margem",
+        "detail": "Renove antes da expiração e pare novas ações se a renovação falhar. Inclua pausas e latência no dimensionamento."
+      },
+      {
+        "title": "Proteger o destino",
+        "detail": "Verifique autoridade no ponto de efeito ou use token monotônico quando necessário. Teste retorno de um dono expirado."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "INSERT INTO lease_demo (recurso, dono, expira_em)\nVALUES ('job-diario', 'execucao-a', clock_timestamp() + interval '30 seconds')\nON CONFLICT (recurso) DO UPDATE\nSET dono = EXCLUDED.dono, expira_em = clock_timestamp() + interval '30 seconds'\nWHERE lease_demo.expira_em < clock_timestamp()\nRETURNING *;",
+      "explanation": "Pressupõe recurso como chave primária e expira_em timestamptz. A consulta usa o relógio do banco e demonstra aquisição, sem implementar renovação ou fencing."
+    },
+    "sources": [
+      {
+        "label": "etcd — Leases and API",
+        "url": "https://etcd.io/docs/v3.6/learning/api/"
+      },
+      {
+        "label": "Kubernetes — Leases",
+        "url": "https://kubernetes.io/docs/concepts/architecture/leases/"
+      }
+    ],
+    "related": [
+      "distributed-lock",
+      "fencing-token",
+      "timeout-deadline"
+    ],
+    "prerequisites": [
+      "Armazenamento de coordenação com comparação atômica e definição de como relógios afetam a validade.",
+      "Protocolo para perder autoridade e política de retomada após interrupções."
+    ],
+    "validation": [
+      "Pause o dono além do prazo, deixe outro assumir e confirme que o primeiro não continua produzindo efeitos proibidos.",
+      "Interrompa renovações mantendo o processo vivo e verifique se ele sinaliza perda de autoridade antes de iniciar novas tarefas."
+    ],
+    "failureModes": [
+      "Uma pausa longa faz a lease expirar; ao voltar, o trabalhador continua agindo com uma autoridade que já não possui.",
+      "A renovação não verifica a identidade da aquisição e prolonga a concessão de um dono diferente."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "a",
+          "label": "Trabalhador A",
+          "technology": "python",
+          "role": "Dono atual",
+          "detail": "Renova enquanto possui autoridade."
+        },
+        {
+          "id": "coord",
+          "label": "Autoridade de leases",
+          "technology": "postgresql",
+          "role": "Coordenação",
+          "detail": "Compara dono e expiração."
+        },
+        {
+          "id": "b",
+          "label": "Trabalhador B",
+          "technology": "nodejs",
+          "role": "Candidato",
+          "detail": "Assume após expiração."
+        },
+        {
+          "id": "resource",
+          "label": "Recurso protegido",
+          "technology": "service",
+          "role": "Efeito",
+          "detail": "Valida a autoridade necessária."
+        }
+      ],
+      "edges": [
+        {
+          "from": "a",
+          "to": "coord",
+          "label": "Adquirir e renovar"
+        },
+        {
+          "from": "b",
+          "to": "coord",
+          "label": "Tentar assumir"
+        },
+        {
+          "from": "a",
+          "to": "resource",
+          "label": "Operação autorizada"
+        },
+        {
+          "from": "b",
+          "to": "resource",
+          "label": "Operação após aquisição"
+        }
+      ]
+    }
+  },
+  {
+    "id": "distributed-lock",
+    "name": "Lock entre processos distribuídos",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "coordenação",
+      "PostgreSQL",
+      "Redis",
+      "exclusão mútua"
+    ],
+    "summary": "Coordena acesso exclusivo a um recurso compartilhado, deixando explícitos escopo, duração e comportamento de falha.",
+    "overview": "Um lock distribuído existe porque processos em máquinas diferentes precisam concordar sobre quem pode executar uma seção crítica. O nome do lock deve representar exatamente o recurso protegido, e todos os caminhos de alteração precisam respeitar o protocolo. Quando os dados já estão em um banco transacional, locks nativos podem reduzir complexidade. Advisory locks do PostgreSQL são uma opção cooperativa: o banco coordena a posse, mas não obriga aplicações que ignoram o lock a obedecer à regra.",
+    "when": [
+      "Existe trabalho que não pode concorrer para a mesma chave e a exclusão não pode ser expressa simplesmente por uma atualização condicional.",
+      "Todos os participantes conseguem acessar a mesma autoridade e respeitar o mesmo nome e escopo de bloqueio."
+    ],
+    "benefits": [
+      "Torna explícita a seção crítica e evita que instâncias da aplicação decidam isoladamente sobre o recurso.",
+      "Locks associados a transações podem ser liberados automaticamente no encerramento da transação ou da sessão correspondente."
+    ],
+    "tradeoffs": [
+      "A autoridade de locks participa da disponibilidade e pode virar ponto de contenção quando muitas operações disputam a mesma chave.",
+      "Locks com expiração precisam tratar donos antigos; uma pausa ou partição pode exigir fencing adicional no recurso."
+    ],
+    "avoid": [
+      "Evite usar um lock como substituto de uma restrição de integridade que o próprio banco consegue impor diretamente."
+    ],
+    "steps": [
+      {
+        "title": "Definir a chave",
+        "detail": "Mapeie a identidade do recurso de forma estável e documente colisões. Evite usar um único lock global por conveniência."
+      },
+      {
+        "title": "Escolher escopo",
+        "detail": "Prefira transação curta quando os efeitos estão no mesmo banco. Diferencie locks de sessão, transação e concessões temporárias."
+      },
+      {
+        "title": "Limitar espera",
+        "detail": "Defina timeout ou tentativa não bloqueante e comportamento de conflito. Nunca mantenha a seção crítica aberta por espera humana."
+      },
+      {
+        "title": "Simular falhas",
+        "detail": "Interrompa o dono e verifique liberação, reconexão e exclusividade. Para recursos externos, teste um dono que retorna depois de perder posse."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "BEGIN;\nSET LOCAL lock_timeout = '1s';\nSELECT pg_advisory_xact_lock(42);\n-- Execute aqui alterações locais que respeitam a mesma chave.\nCOMMIT;",
+      "explanation": "A chave 42 é apenas um recurso de laboratório. O advisory lock é cooperativo e transacional; o comentário não representa uma chamada externa nem um protocolo de fencing."
+    },
+    "sources": [
+      {
+        "label": "PostgreSQL — Advisory locks",
+        "url": "https://www.postgresql.org/docs/current/explicit-locking.html"
+      },
+      {
+        "label": "Redis — Distributed locks",
+        "url": "https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/"
+      }
+    ],
+    "related": [
+      "lease",
+      "fencing-token",
+      "pessimistic-locking"
+    ],
+    "prerequisites": [
+      "Autoridade compartilhada e catálogo das operações que precisam obedecer ao mesmo lock.",
+      "Tempo máximo de seção crítica e uma política de resposta quando o lock não pode ser adquirido."
+    ],
+    "validation": [
+      "Abra duas sessões, adquira o mesmo lock na primeira e confirme que a segunda espera ou falha conforme a política.",
+      "Encerre a sessão proprietária no laboratório e confirme a liberação; repita o teste com reconexões e transações abortadas."
+    ],
+    "failureModes": [
+      "Um caminho de código ignora o lock e altera o recurso, invalidando a exclusão presumida pelos demais.",
+      "Um cliente remove uma chave de lock Redis sem comparar seu token e apaga a posse que já pertence a outro processo."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "a",
+          "label": "Instância A",
+          "technology": "python",
+          "role": "Participante",
+          "detail": "Adquire a chave antes da seção crítica."
+        },
+        {
+          "id": "b",
+          "label": "Instância B",
+          "technology": "nodejs",
+          "role": "Participante",
+          "detail": "Respeita o mesmo protocolo."
+        },
+        {
+          "id": "lock",
+          "label": "Autoridade de locks",
+          "technology": "postgresql",
+          "role": "Exclusão",
+          "detail": "Mantém a posse transacional."
+        }
+      ],
+      "edges": [
+        {
+          "from": "a",
+          "to": "lock",
+          "label": "Adquirir e liberar"
+        },
+        {
+          "from": "b",
+          "to": "lock",
+          "label": "Adquirir e liberar"
+        }
+      ]
+    }
+  },
+  {
+    "id": "fencing-token",
+    "name": "Token de fencing",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "coordenação",
+      "concorrência",
+      "leases",
+      "integridade"
+    ],
+    "summary": "Faz o recurso rejeitar operações de proprietários antigos usando uma geração monotônica associada à autoridade concedida.",
+    "overview": "Uma lease pode expirar enquanto seu dono está pausado. Quando ele retorna, ainda pode tentar escrever. Um token de fencing atribui uma geração crescente a cada nova concessão; o destino registra a geração mais recente que aceitou e rejeita gerações menores. A proteção precisa existir no recurso que sofre o efeito, não apenas na aplicação que acredita possuir o lock. Um UUID identifica uma aquisição, mas não permite ordenar donos. Tokens também não substituem deduplicação de operações dentro da mesma geração.",
+    "when": [
+      "Um proprietário antigo pode continuar executando após perder a lease e o recurso permite rejeitar gerações obsoletas.",
+      "O custo de uma escrita atrasada é alto o suficiente para exigir proteção além da posse no coordenador."
+    ],
+    "benefits": [
+      "Bloqueia o retorno de um dono antigo depois que o recurso já reconheceu uma geração mais nova.",
+      "Move a decisão final de autoridade para o ponto onde a alteração é aplicada, incluindo o caso de pausas longas."
+    ],
+    "tradeoffs": [
+      "Coordenador e recurso precisam participar do protocolo; adicionar um número no cliente não oferece a garantia sozinho.",
+      "A geração deve permanecer monotônica nas falhas admitidas, inclusive restauração e failover; um contador frágil pode reutilizar valores."
+    ],
+    "avoid": [
+      "Evite gerar números independentes da concessão de autoridade ou usar timestamps de relógios não coordenados como prova de ordem."
+    ],
+    "steps": [
+      {
+        "title": "Acoplar concessão e geração",
+        "detail": "Use um mecanismo consistente que associe um token crescente a cada nova autoridade. Documente como ele sobrevive a falhas."
+      },
+      {
+        "title": "Persistir maior token",
+        "detail": "Mantenha no recurso a maior geração aceita junto com o estado protegido, usando comparação atômica."
+      },
+      {
+        "title": "Rejeitar antigos",
+        "detail": "Aplique a alteração somente se o token satisfizer a regra do recurso. Retorne erro explícito para proprietários obsoletos."
+      },
+      {
+        "title": "Testar dono pausado",
+        "detail": "Aceite a operação de uma geração nova e então libere uma operação antiga atrasada; ela deve ser rejeitada."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "UPDATE recurso_fence\nSET valor = 'estado novo', maior_token = 12\nWHERE id = 1 AND maior_token <= 12\nRETURNING *;",
+      "explanation": "A comparação e a alteração são atômicas no banco. O número 12 é um dado de teste; em produção ele deve vir de uma concessão válida de autoridade."
+    },
+    "sources": [
+      {
+        "label": "etcd — API guarantees and revisions",
+        "url": "https://etcd.io/docs/v3.6/learning/api_guarantees/"
+      },
+      {
+        "label": "PostgreSQL — UPDATE",
+        "url": "https://www.postgresql.org/docs/current/sql-update.html"
+      }
+    ],
+    "related": [
+      "lease",
+      "distributed-lock",
+      "raft-consensus"
+    ],
+    "prerequisites": [
+      "Um coordenador que emita gerações consistentes e um destino capaz de compará-las atomicamente.",
+      "Política para reinicialização, backup e restauração que impeça reutilizar uma geração já observada."
+    ],
+    "validation": [
+      "Aplique token 12, tente token 11 e confirme que a segunda operação altera zero linhas.",
+      "Repita o mesmo token para verificar a semântica dentro de uma geração; se necessário, acrescente identidade de operação."
+    ],
+    "failureModes": [
+      "O recurso aceita qualquer token e a checagem ocorre apenas no cliente, permitindo escritas de um dono pausado.",
+      "Uma restauração faz o coordenador voltar a um contador antigo e novas concessões passam a ser recusadas ou confundidas."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "coord",
+          "label": "Coordenador",
+          "technology": "service",
+          "role": "Geração",
+          "detail": "Emite autoridade e token monotônico."
+        },
+        {
+          "id": "old",
+          "label": "Dono antigo",
+          "technology": "python",
+          "role": "Atrasado",
+          "detail": "Pode voltar após uma pausa."
+        },
+        {
+          "id": "new",
+          "label": "Dono atual",
+          "technology": "nodejs",
+          "role": "Ativo",
+          "detail": "Apresenta a geração nova."
+        },
+        {
+          "id": "db",
+          "label": "Recurso com fencing",
+          "technology": "postgresql",
+          "role": "Validação",
+          "detail": "Rejeita gerações menores."
+        }
+      ],
+      "edges": [
+        {
+          "from": "coord",
+          "to": "new",
+          "label": "Concessão com token"
+        },
+        {
+          "from": "old",
+          "to": "db",
+          "label": "Token obsoleto"
+        },
+        {
+          "from": "new",
+          "to": "db",
+          "label": "Token atual"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Criar recurso",
+        "detail": "Use uma tabela descartável; a geração inicial é zero.",
+        "language": "sql",
+        "code": "CREATE TABLE recurso_fence (id integer PRIMARY KEY, maior_token bigint NOT NULL, valor text NOT NULL);\nINSERT INTO recurso_fence VALUES (1, 0, 'inicial');"
+      },
+      {
+        "title": "Aceitar geração nova",
+        "detail": "Este laboratório fornece tokens manualmente para isolar a verificação do destino.",
+        "language": "sql",
+        "code": "UPDATE recurso_fence SET maior_token = 12, valor = 'dono novo'\nWHERE id = 1 AND maior_token <= 12 RETURNING *;"
+      },
+      {
+        "title": "Rejeitar dono antigo",
+        "detail": "A tentativa com geração 11 deve retornar zero linhas e preservar o estado anterior.",
+        "language": "sql",
+        "code": "UPDATE recurso_fence SET maior_token = 11, valor = 'dono antigo'\nWHERE id = 1 AND maior_token <= 11 RETURNING *;\nSELECT * FROM recurso_fence;"
+      }
+    ]
+  },
+  {
+    "id": "write-through",
+    "name": "Cache com escrita síncrona — write-through",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "cache",
+      "consistência",
+      "Redis",
+      "escrita"
+    ],
+    "summary": "Atualiza o armazenamento e a camada de cache no caminho da escrita, com uma política explícita para falhas parciais.",
+    "overview": "Em write-through, a escrita passa por uma camada que mantém persistência e cache atualizados de forma síncrona antes de encerrar o caminho planejado. Isso reduz a chance de uma leitura seguinte encontrar apenas a versão antiga no cache, mas não cria atomicidade entre dois sistemas independentes. Se o banco confirma e o cache falha, o resultado precisa ser tratado com cuidado. A aplicação deve definir qual sistema é autoritativo, como invalidar entradas antigas e como comunicar um resultado que pode já ter sido persistido.",
+    "when": [
+      "Os valores escritos tendem a ser lidos logo depois e manter o cache aquecido compensa o custo adicional na escrita.",
+      "Existe um caminho centralizado de atualização e uma política viável para recuperar divergências entre cache e armazenamento."
+    ],
+    "benefits": [
+      "Leituras frequentes após escrita podem encontrar o valor atualizado sem esperar uma primeira falta de cache.",
+      "A centralização do caminho de atualização facilita métricas e regras de coerência para os dados cacheados."
+    ],
+    "tradeoffs": [
+      "A latência de escrita inclui a atualização do cache e pode sofrer quando essa dependência fica lenta.",
+      "Sem transação distribuída, falhas entre persistência e cache deixam estados intermediários que precisam de invalidação ou reconciliação."
+    ],
+    "avoid": [
+      "Evite prometer consistência forte apenas porque duas chamadas são feitas em sequência; leitores concorrentes ainda podem observar intervalos intermediários."
+    ],
+    "steps": [
+      {
+        "title": "Escolher autoridade",
+        "detail": "Defina o banco como origem ou documente outra escolha. Todas as alterações relevantes devem passar pelo contrato de escrita."
+      },
+      {
+        "title": "Ordenar operações",
+        "detail": "Determine a sequência de persistência e cache, considerando concorrência, versões e leitores que podem repopular valores antigos."
+      },
+      {
+        "title": "Tratar falha parcial",
+        "detail": "Após commit, não suponha rollback porque o cache falhou. Invalide, registre reparo e preserve identidade da operação quando necessário."
+      },
+      {
+        "title": "Medir benefício",
+        "detail": "Compare taxa de acerto, latência de escrita e custo de atualizar itens que talvez nunca sejam lidos."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import sqlite3\n\nbanco = sqlite3.connect(':memory:')\nbanco.execute('CREATE TABLE produto (id INTEGER PRIMARY KEY, nome TEXT)')\ncache = {}\n\ndef salvar(produto_id, nome):\n    with banco:\n        banco.execute('INSERT INTO produto VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET nome=excluded.nome', (produto_id, nome))\n    cache[produto_id] = nome\n\nsalvar(1, 'Caderno')\nprint(cache[1])",
+      "explanation": "O laboratório usa SQLite e dicionário locais para mostrar a ordem. Um Redis remoto pode falhar depois do commit e requer o tratamento de divergência descrito no guia."
+    },
+    "sources": [
+      {
+        "label": "AWS — Caching patterns",
+        "url": "https://docs.aws.amazon.com/whitepapers/latest/database-caching-strategies-using-redis/caching-patterns.html"
+      },
+      {
+        "label": "Hazelcast — MapStore",
+        "url": "https://docs.hazelcast.com/hazelcast/latest/mapstore/working-with-external-data"
+      }
+    ],
+    "related": [
+      "write-behind",
+      "cache-invalidation",
+      "optimistic-locking"
+    ],
+    "prerequisites": [
+      "Contrato único de escrita, origem autoritativa definida e métricas da proporção entre escritas e leituras.",
+      "Política de versão ou invalidação que cubra atualizações concorrentes e indisponibilidade do cache."
+    ],
+    "validation": [
+      "Interrompa o cache depois do commit e confirme que o sistema reconhece a persistência e repara ou invalida a cópia.",
+      "Execute duas escritas concorrentes e verifique se uma atualização atrasada não substitui no cache o valor mais recente."
+    ],
+    "failureModes": [
+      "A API responde falha genérica após o commit e o cliente repete uma operação não protegida contra duplicação.",
+      "Uma escrita antiga chega ao cache depois de uma nova e reintroduz uma versão obsoleta."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "api",
+          "label": "Camada de escrita",
+          "technology": "python",
+          "role": "Coordenação",
+          "detail": "Executa o contrato síncrono."
+        },
+        {
+          "id": "db",
+          "label": "Banco autoritativo",
+          "technology": "postgresql",
+          "role": "Persistência",
+          "detail": "Confirma o estado de negócio."
+        },
+        {
+          "id": "cache",
+          "label": "Cache",
+          "technology": "redis",
+          "role": "Leitura rápida",
+          "detail": "Recebe valor ou invalidação."
+        }
+      ],
+      "edges": [
+        {
+          "from": "api",
+          "to": "db",
+          "label": "Persistir alteração"
+        },
+        {
+          "from": "api",
+          "to": "cache",
+          "label": "Atualizar antes da resposta"
+        }
+      ]
+    }
+  },
+  {
+    "id": "write-behind",
+    "name": "Cache com persistência adiada — write-behind",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "cache",
+      "filas",
+      "persistência",
+      "latência"
+    ],
+    "summary": "Aceita alterações na camada intermediária e posterga sua gravação no armazenamento de destino.",
+    "overview": "Write-behind reduz o tempo de espera da escrita ao permitir que a aplicação avance antes de a alteração chegar ao banco final. A camada intermediária acumula mudanças e as persiste depois, muitas vezes em lotes. O ganho vem acompanhado de uma pergunta essencial: onde a escrita confirmada já está durável? Se ela existe somente na memória de um processo, uma falha pode perdê-la. Uma implementação robusta precisa definir replicação, log ou fila persistente, ordem por chave e comportamento quando o destino permanece indisponível.",
+    "when": [
+      "O negócio aceita persistência adiada e o ganho de latência ou agrupamento de escritas justifica operar um caminho assíncrono.",
+      "Existe uma camada intermediária com garantias de durabilidade compatíveis com a confirmação oferecida ao cliente."
+    ],
+    "benefits": [
+      "Pode reduzir latência percebida e agrupar alterações para aproveitar melhor a capacidade de escrita do destino.",
+      "Permite absorver interrupções curtas do banco dentro de uma capacidade e de um prazo previamente dimensionados."
+    ],
+    "tradeoffs": [
+      "Uma confirmação antes da persistência final cria uma janela de risco que precisa ser coberta ou explicitamente aceita.",
+      "Agrupar atualizações da mesma chave pode eliminar estados intermediários; isso só é correto quando a semântica permite essa compressão."
+    ],
+    "avoid": [
+      "Evite usar apenas um dicionário ou uma fila em memória para confirmar gravações que o usuário espera recuperar depois de um reinício."
+    ],
+    "steps": [
+      {
+        "title": "Definir confirmação",
+        "detail": "Explique ao cliente onde o dado está persistido quando a resposta chega. Estabeleça o limite de perda permitido."
+      },
+      {
+        "title": "Registrar pendências",
+        "detail": "Use a capacidade durável da tecnologia escolhida, com identidade e versão por chave. Documente limites de armazenamento."
+      },
+      {
+        "title": "Persistir em lotes",
+        "detail": "Controle tamanho, intervalo e concorrência. Remova a pendência apenas depois da confirmação do destino."
+      },
+      {
+        "title": "Operar atraso",
+        "detail": "Acompanhe idade da alteração mais antiga, erros e espaço livre. Recuse novas escritas antes de esgotar a capacidade."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from collections import deque\nimport sqlite3\n\nbanco = sqlite3.connect(':memory:')\nbanco.execute('CREATE TABLE item (id INTEGER PRIMARY KEY, valor TEXT)')\npendentes = deque([(1, 'novo valor')])\n\ndef persistir_um():\n    item_id, valor = pendentes[0]\n    with banco:\n        banco.execute('INSERT INTO item VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET valor=excluded.valor', (item_id, valor))\n    pendentes.popleft()\n\npersistir_um()\nprint(banco.execute('SELECT * FROM item').fetchall())",
+      "explanation": "Simulação local sem durabilidade da fila nem do SQLite em memória. A ordem de remover somente após commit é didática; o exemplo não deve confirmar escritas de produção."
+    },
+    "sources": [
+      {
+        "label": "Hazelcast — Write-behind with MapStore",
+        "url": "https://docs.hazelcast.com/hazelcast/latest/mapstore/working-with-external-data"
+      },
+      {
+        "label": "RabbitMQ — Publisher confirms",
+        "url": "https://www.rabbitmq.com/docs/confirms"
+      }
+    ],
+    "related": [
+      "write-through",
+      "backpressure",
+      "deduplication"
+    ],
+    "prerequisites": [
+      "Uma definição de durabilidade da camada intermediária e testes de reinício que comprovem essa garantia.",
+      "Regras de ordenação e compressão por chave, além de capacidade para conter o atraso durante falhas."
+    ],
+    "validation": [
+      "Interrompa o destino, aceite um volume controlado e confirme recuperação ordenada depois de restabelecer a conexão.",
+      "Encerre a camada intermediária após uma confirmação ao cliente e verifique quais alterações sobrevivem ao reinício."
+    ],
+    "failureModes": [
+      "A aplicação confirma dados existentes apenas em memória e perde gravações após reiniciar.",
+      "Lotes são aplicados fora de ordem e um valor antigo sobrescreve uma atualização mais recente no destino."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "api",
+          "label": "Aplicação",
+          "technology": "python",
+          "role": "Entrada",
+          "detail": "Envia alterações à camada intermediária."
+        },
+        {
+          "id": "cache",
+          "label": "Cache e pendências",
+          "technology": "redis",
+          "role": "Aceitação",
+          "detail": "Precisa de durabilidade definida."
+        },
+        {
+          "id": "worker",
+          "label": "Persistidor",
+          "technology": "service",
+          "role": "Lote",
+          "detail": "Controla ordem e confirmação."
+        },
+        {
+          "id": "db",
+          "label": "Banco de destino",
+          "technology": "postgresql",
+          "role": "Persistência final",
+          "detail": "Recebe alterações adiadas."
+        }
+      ],
+      "edges": [
+        {
+          "from": "api",
+          "to": "cache",
+          "label": "Escrita aceita"
+        },
+        {
+          "from": "cache",
+          "to": "worker",
+          "label": "Alterações pendentes"
+        },
+        {
+          "from": "worker",
+          "to": "db",
+          "label": "Persistir lote"
+        }
+      ]
+    }
+  },
+  {
+    "id": "cache-invalidation",
+    "name": "Invalidação de cache",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "cache",
+      "Redis",
+      "coerência",
+      "versionamento"
+    ],
+    "summary": "Remove ou torna inacessíveis cópias que podem estar desatualizadas, considerando corridas e perda de notificações.",
+    "overview": "Invalidar significa impedir que uma cópia antiga continue sendo usada depois que a origem muda. Apagar uma chave após o commit é um ponto de partida comum, mas existe uma corrida: uma leitura iniciada antes da alteração pode preencher novamente o cache com o valor antigo depois da exclusão. TTL limita a permanência de uma entrada, porém não resolve todas as exigências de consistência. O desenho precisa combinar origem autoritativa, política de atualização, versões e comportamento quando notificações são perdidas.",
+    "when": [
+      "Dados cacheados podem mudar e existe uma expectativa explícita sobre quanto tempo uma cópia antiga pode ser utilizada.",
+      "Vários processos mantêm caches locais ou compartilhados e precisam reagir a alterações do mesmo registro."
+    ],
+    "benefits": [
+      "Evita atualizar antecipadamente valores que talvez não sejam consultados novamente e reduz manutenção desnecessária do cache.",
+      "Uma política clara permite reconstruir cópias a partir da origem sem tornar o cache o único lugar onde o dado existe."
+    ],
+    "tradeoffs": [
+      "Invalidação por evento exige lidar com atraso, duplicação e desconexão; uma mensagem perdida pode prolongar incoerência.",
+      "Chaves relacionadas, listas e agregações ampliam o alcance da invalidação e tornam dependências difíceis de mapear."
+    ],
+    "avoid": [
+      "Evite afirmar que apagar a chave depois do commit garante leitura imediatamente consistente em todos os processos."
+    ],
+    "steps": [
+      {
+        "title": "Mapear dependências",
+        "detail": "Identifique quais chaves, listas e agregados dependem de cada alteração da origem, incluindo caches locais."
+      },
+      {
+        "title": "Definir política",
+        "detail": "Escolha TTL, invalidação ativa, versionamento ou combinação, partindo do atraso permitido e do custo de reconstrução."
+      },
+      {
+        "title": "Tratar corridas",
+        "detail": "Teste leitores antigos preenchendo o cache após uma escrita. Use versões verificadas ou um protocolo apropriado quando a janela for inaceitável."
+      },
+      {
+        "title": "Recuperar desconexões",
+        "detail": "Ao perder o canal de invalidação, descarte entradas potencialmente incoerentes ou mude temporariamente o caminho de leitura."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import redis\n\nr = redis.Redis(host='localhost', port=6379, decode_responses=True)\nr.set('produto:42', 'valor anterior', ex=60)\nremovidas = r.delete('produto:42')\nprint('Entradas removidas:', removidas)\nprint('Depois da invalidação:', r.get('produto:42'))",
+      "explanation": "Requer redis-py e Redis local. A exclusão demonstra uma operação real, mas não inclui transação do banco nem elimina a corrida de preenchimento concorrente."
+    },
+    "sources": [
+      {
+        "label": "Redis — Client-side caching and invalidation",
+        "url": "https://redis.io/docs/latest/develop/reference/client-side-caching/"
+      },
+      {
+        "label": "Redis — EXPIRE",
+        "url": "https://redis.io/docs/latest/commands/expire/"
+      }
+    ],
+    "related": [
+      "write-through",
+      "write-behind",
+      "materialized-view"
+    ],
+    "prerequisites": [
+      "Origem autoritativa conhecida, atraso tolerado definido e inventário das camadas que podem manter cópias.",
+      "Métricas de taxa de acerto, idade dos valores e falhas no canal de atualização."
+    ],
+    "validation": [
+      "Suspenda um leitor após ele ler a origem, atualize e invalide o registro, então deixe o leitor preencher o cache; observe a corrida.",
+      "Desconecte um cliente do canal de invalidação e confirme que a política de reconexão não reutiliza silenciosamente valores incertos."
+    ],
+    "failureModes": [
+      "Uma lista cacheada mantém um registro removido porque somente a chave individual foi invalidada.",
+      "Um leitor atrasado repopula o valor antigo após a invalidação e estende sua utilização até nova atualização ou expiração."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "writer",
+          "label": "Escritor",
+          "technology": "python",
+          "role": "Alteração",
+          "detail": "Confirma a origem e sinaliza invalidação."
+        },
+        {
+          "id": "db",
+          "label": "Origem autoritativa",
+          "technology": "postgresql",
+          "role": "Estado",
+          "detail": "Guarda a versão real do dado."
+        },
+        {
+          "id": "cache",
+          "label": "Cache compartilhado",
+          "technology": "redis",
+          "role": "Cópia",
+          "detail": "Remove ou expira entradas."
+        },
+        {
+          "id": "reader",
+          "label": "Leitor",
+          "technology": "nodejs",
+          "role": "Consulta",
+          "detail": "Pode disputar o preenchimento."
+        }
+      ],
+      "edges": [
+        {
+          "from": "writer",
+          "to": "db",
+          "label": "Commit"
+        },
+        {
+          "from": "writer",
+          "to": "cache",
+          "label": "Invalidar chave"
+        },
+        {
+          "from": "reader",
+          "to": "cache",
+          "label": "Consultar ou preencher"
+        },
+        {
+          "from": "reader",
+          "to": "db",
+          "label": "Ler origem em falta"
+        }
+      ]
+    }
+  },
+  {
+    "id": "optimistic-locking",
+    "name": "Concorrência otimista por versão",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "PostgreSQL",
+      "concorrência",
+      "versionamento",
+      "integridade"
+    ],
+    "summary": "Aceita uma alteração somente se a versão persistida ainda for a mesma que o cliente utilizou para decidir.",
+    "overview": "Na concorrência otimista, a aplicação lê um registro com sua versão e envia a versão esperada ao atualizar. O banco altera a linha apenas se ela ainda corresponde à expectativa, incrementando a versão na mesma instrução. Se outra operação venceu antes, nenhuma linha é atualizada e a aplicação trata o conflito. Isso evita sobrescrever silenciosamente decisões feitas sobre estado antigo. A técnica funciona bem quando conflitos são relativamente raros e não exige manter uma transação aberta enquanto o usuário pensa.",
+    "when": [
+      "Usuários ou processos podem editar o mesmo registro e a aplicação precisa detectar decisões feitas sobre versões antigas.",
+      "A maioria das alterações não conflita e segurar bloqueios durante todo o intervalo de leitura e decisão seria caro."
+    ],
+    "benefits": [
+      "Preserva alterações concorrentes ao tornar o conflito explícito, permitindo recarregar, mesclar ou pedir nova decisão.",
+      "Mantém transações curtas e evita bloquear uma linha durante interações demoradas fora do banco."
+    ],
+    "tradeoffs": [
+      "O consumidor da API precisa entender conflitos; repetir automaticamente uma decisão antiga pode continuar incorreto.",
+      "Uma versão por linha não protege sozinha invariantes que envolvem várias linhas, consultas de intervalo ou ausência de registros."
+    ],
+    "avoid": [
+      "Evite ignorar a contagem de linhas alteradas: zero linhas é justamente o sinal que torna a proteção útil."
+    ],
+    "steps": [
+      {
+        "title": "Adicionar versão",
+        "detail": "Crie um campo inteiro não nulo e devolva seu valor nas leituras relevantes. Estabeleça quem pode alterá-lo."
+      },
+      {
+        "title": "Atualizar condicionalmente",
+        "detail": "Inclua identificador e versão esperada no WHERE e incremente a versão na mesma instrução SQL."
+      },
+      {
+        "title": "Interpretar conflito",
+        "detail": "Se nenhuma linha mudar, diferencie ausência de recurso e versão divergente conforme o contrato, sem sobrescrever silenciosamente."
+      },
+      {
+        "title": "Validar invariantes",
+        "detail": "Analise regras que atravessam registros. Use restrições, isolamento ou coordenação adicional quando a versão individual não for suficiente."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "UPDATE documento_versao\nSET titulo = 'Revisado', versao = versao + 1\nWHERE id = 1 AND versao = 1\nRETURNING id, titulo, versao;",
+      "explanation": "O cliente espera a versão 1. Se outra alteração já avançou para 2, a instrução retorna zero linhas e não substitui o título atual."
+    },
+    "sources": [
+      {
+        "label": "PostgreSQL — UPDATE",
+        "url": "https://www.postgresql.org/docs/current/sql-update.html"
+      },
+      {
+        "label": "PostgreSQL — Transaction isolation",
+        "url": "https://www.postgresql.org/docs/current/transaction-iso.html"
+      }
+    ],
+    "related": [
+      "pessimistic-locking",
+      "fencing-token",
+      "event-carried-state-transfer"
+    ],
+    "prerequisites": [
+      "Coluna de versão controlada pelo sistema e clientes capazes de enviar a versão usada na decisão.",
+      "Uma política de conflito apropriada ao negócio, incluindo quando uma tentativa pode ser recalculada."
+    ],
+    "validation": [
+      "Leia a versão uma vez e envie duas alterações com essa mesma expectativa; somente a primeira deve modificar a linha.",
+      "Teste uma invariante de múltiplos registros para verificar se a proteção por linha realmente cobre a regra desejada."
+    ],
+    "failureModes": [
+      "Um endpoint atualiza o registro sem verificar ou incrementar a versão e contorna o protocolo.",
+      "O código repete a mesma alteração conflitante com a versão nova sem reconsiderar a decisão, recriando uma perda lógica de atualização."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "a",
+          "label": "Editor A",
+          "technology": "client",
+          "role": "Decisão",
+          "detail": "Lê e envia versão esperada."
+        },
+        {
+          "id": "b",
+          "label": "Editor B",
+          "technology": "client",
+          "role": "Concorrência",
+          "detail": "Pode partir da mesma versão."
+        },
+        {
+          "id": "api",
+          "label": "API",
+          "technology": "python",
+          "role": "Validação",
+          "detail": "Interpreta conflito de atualização."
+        },
+        {
+          "id": "db",
+          "label": "Registro versionado",
+          "technology": "postgresql",
+          "role": "Atomicidade",
+          "detail": "Compara e incrementa versão."
+        }
+      ],
+      "edges": [
+        {
+          "from": "a",
+          "to": "api",
+          "label": "Alteração com versão"
+        },
+        {
+          "from": "b",
+          "to": "api",
+          "label": "Alteração concorrente"
+        },
+        {
+          "from": "api",
+          "to": "db",
+          "label": "UPDATE condicional"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Criar documento",
+        "detail": "Execute em um schema descartável.",
+        "language": "sql",
+        "code": "CREATE TABLE documento_versao (id bigint PRIMARY KEY, titulo text NOT NULL, versao bigint NOT NULL);\nINSERT INTO documento_versao VALUES (1, 'Original', 1);"
+      },
+      {
+        "title": "Aplicar primeira decisão",
+        "detail": "A versão passa de 1 para 2.",
+        "language": "sql",
+        "code": "UPDATE documento_versao SET titulo = 'Editor A', versao = versao + 1\nWHERE id = 1 AND versao = 1 RETURNING *;"
+      },
+      {
+        "title": "Simular decisão atrasada",
+        "detail": "A segunda alteração deve retornar zero linhas e preservar o título do editor A.",
+        "language": "sql",
+        "code": "UPDATE documento_versao SET titulo = 'Editor B', versao = versao + 1\nWHERE id = 1 AND versao = 1 RETURNING *;\nSELECT * FROM documento_versao;"
+      }
+    ]
+  },
+  {
+    "id": "pessimistic-locking",
+    "name": "Concorrência pessimista por bloqueio",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Intermediário",
+    "tags": [
+      "PostgreSQL",
+      "transações",
+      "bloqueios",
+      "deadlock"
+    ],
+    "summary": "Bloqueia os registros necessários durante uma transação curta para serializar decisões concorrentes sobre eles.",
+    "overview": "Com bloqueio pessimista, uma transação adquire o direito de alterar linhas antes de tomar a decisão protegida. No PostgreSQL, SELECT FOR UPDATE bloqueia as linhas selecionadas para impedir alterações concorrentes incompatíveis até o fim da transação. Ele não bloqueia automaticamente registros inexistentes nem toda regra baseada em uma consulta. A técnica é útil quando a contenção é real e o trabalho cabe em uma transação curta. Espera humana e chamadas remotas prolongam bloqueios e devem ficar fora desse trecho.",
+    "when": [
+      "Duas operações disputam o mesmo recurso e precisam tomar uma decisão baseada no valor que será alterado em seguida.",
+      "O custo de conflitos otimistas repetidos é alto e a seção crítica pode permanecer pequena e previsível."
+    ],
+    "benefits": [
+      "Serializa alterações conflitantes no ponto protegido, facilitando regras que leem e atualizam a mesma linha.",
+      "O banco libera os locks ao encerrar a transação, integrando exclusão e persistência no mesmo mecanismo."
+    ],
+    "tradeoffs": [
+      "A espera aumenta latência sob contenção e pode formar filas de transações presas ao mesmo recurso.",
+      "Bloquear vários registros em ordens diferentes pode gerar deadlock, exigindo aborto e repetição controlada da transação."
+    ],
+    "avoid": [
+      "Evite manter uma transação bloqueando dados enquanto espera uma API externa, confirmação de usuário ou processamento demorado."
+    ],
+    "steps": [
+      {
+        "title": "Delimitar a regra",
+        "detail": "Identifique exatamente quais linhas precisam permanecer estáveis e quais invariantes dependem de outros registros."
+      },
+      {
+        "title": "Ordenar aquisição",
+        "detail": "Adquira múltiplos locks em ordem consistente entre todos os caminhos, reduzindo a possibilidade de ciclos."
+      },
+      {
+        "title": "Limitar duração",
+        "detail": "Configure timeout de espera e mantenha a transação curta. Planeje tratamento de deadlock e cancelamento."
+      },
+      {
+        "title": "Observar contenção",
+        "detail": "Monitore bloqueadores, duração de transações e filas de espera. Reavalie o desenho quando uma chave concentrar a carga."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "BEGIN;\nSET LOCAL lock_timeout = '2s';\nSELECT quantidade FROM estoque_lock WHERE produto_id = 1 FOR UPDATE;\nUPDATE estoque_lock SET quantidade = quantidade - 1\nWHERE produto_id = 1 AND quantidade > 0\nRETURNING quantidade;\nCOMMIT;",
+      "explanation": "O predicado quantidade > 0 protege o limite no UPDATE. Uma aplicação real precisa interpretar zero linhas; o lock não substitui a validação da regra."
+    },
+    "sources": [
+      {
+        "label": "PostgreSQL — Explicit locking",
+        "url": "https://www.postgresql.org/docs/current/explicit-locking.html"
+      },
+      {
+        "label": "PostgreSQL — SELECT locking clauses",
+        "url": "https://www.postgresql.org/docs/current/sql-select.html"
+      }
+    ],
+    "related": [
+      "optimistic-locking",
+      "distributed-lock",
+      "two-phase-commit"
+    ],
+    "prerequisites": [
+      "Transações explícitas, índices adequados para localizar linhas e política de repetição de transações abortadas.",
+      "Compreensão de quais invariantes exigem proteção além das linhas existentes selecionadas."
+    ],
+    "validation": [
+      "Abra duas sessões e confira que a segunda espera ou atinge o timeout enquanto a primeira mantém o lock.",
+      "Produza aquisição invertida de dois recursos no laboratório e observe o deadlock, verificando que o tratamento repete a transação completa quando seguro."
+    ],
+    "failureModes": [
+      "Uma chamada remota lenta dentro da transação mantém locks e esgota o pool de conexões.",
+      "A aplicação protege uma linha, mas a regra depende de outras linhas ou de uma ausência que não foi bloqueada."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "a",
+          "label": "Transação A",
+          "technology": "python",
+          "role": "Decisão",
+          "detail": "Adquire a linha antes de alterar."
+        },
+        {
+          "id": "b",
+          "label": "Transação B",
+          "technology": "nodejs",
+          "role": "Concorrência",
+          "detail": "Espera ou recebe conflito."
+        },
+        {
+          "id": "db",
+          "label": "Banco e lock de linha",
+          "technology": "postgresql",
+          "role": "Coordenação",
+          "detail": "Mantém exclusão até commit ou rollback."
+        }
+      ],
+      "edges": [
+        {
+          "from": "a",
+          "to": "db",
+          "label": "SELECT FOR UPDATE"
+        },
+        {
+          "from": "b",
+          "to": "db",
+          "label": "Acesso concorrente"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Preparar estoque",
+        "detail": "Execute uma vez antes de abrir as duas sessões do teste.",
+        "language": "sql",
+        "code": "CREATE TABLE estoque_lock (produto_id bigint PRIMARY KEY, quantidade integer NOT NULL CHECK (quantidade >= 0));\nINSERT INTO estoque_lock VALUES (1, 2);"
+      },
+      {
+        "title": "Bloquear na sessão A",
+        "detail": "Deixe a transação aberta apenas durante este teste controlado; depois execute COMMIT ou ROLLBACK.",
+        "language": "sql",
+        "code": "BEGIN;\nSELECT * FROM estoque_lock WHERE produto_id = 1 FOR UPDATE;"
+      },
+      {
+        "title": "Testar na sessão B",
+        "detail": "A consulta deve atingir o timeout enquanto A mantiver a transação. Execute ROLLBACK na sessão B após o erro e finalize A.",
+        "language": "sql",
+        "code": "BEGIN;\nSET LOCAL lock_timeout = '1s';\nSELECT * FROM estoque_lock WHERE produto_id = 1 FOR UPDATE;"
+      }
+    ]
+  },
+  {
+    "id": "two-phase-commit",
+    "name": "Commit em duas fases — 2PC",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas distribuídos",
+    "level": "Avançado",
+    "tags": [
+      "transações distribuídas",
+      "PostgreSQL",
+      "atomicidade",
+      "coordenação"
+    ],
+    "summary": "Coordena participantes capazes de preparar uma transação e seguir uma decisão durável de commit ou rollback.",
+    "overview": "No 2PC, o coordenador primeiro pede que cada participante prepare sua transação. Se todos confirmarem preparação, ele registra duravelmente a decisão de commit e a comunica; caso contrário, decide abortar conforme o protocolo. Participantes preparados preservam estado e podem manter locks enquanto aguardam a decisão. Uma falha do coordenador cria trabalho de recuperação, não autorização para cada participante escolher sozinho. O protocolo trata compromisso atômico entre recursos; não é o mesmo problema que consenso sobre um log replicado.",
+    "when": [
+      "Uma operação precisa de atomicidade entre recursos que suportam preparação e existe um coordenador durável apropriado.",
+      "O domínio aceita o custo de coordenação e a possibilidade de transações preparadas aguardarem recuperação."
+    ],
+    "benefits": [
+      "Permite que participantes capazes mantenham uma decisão conjunta de confirmação ou aborto para alterações distribuídas.",
+      "Oferece um modelo explícito de recuperação baseado em identidades de transação e na decisão persistida pelo coordenador."
+    ],
+    "tradeoffs": [
+      "Transações preparadas podem reter locks e recursos por tempo prolongado quando a decisão não está disponível.",
+      "Operação, timeout e recuperação são mais complexos que uma transação local; todos os participantes precisam suportar o protocolo exigido."
+    ],
+    "avoid": [
+      "Evite usar PREPARE TRANSACTION manualmente em produção sem um coordenador e um procedimento de recuperação testados."
+    ],
+    "steps": [
+      {
+        "title": "Verificar suporte",
+        "detail": "Confirme capacidades dos participantes e configure limites de transações preparadas apenas nos ambientes que precisam delas."
+      },
+      {
+        "title": "Identificar a operação",
+        "detail": "Use uma identidade global e associe cada participante. Registre estados e decisões em armazenamento durável do coordenador."
+      },
+      {
+        "title": "Executar duas fases",
+        "detail": "Prepare todos os participantes e só distribua commit após a decisão correspondente estar persistida; trate respostas perdidas por recuperação."
+      },
+      {
+        "title": "Operar pendências",
+        "detail": "Monitore idade das transações preparadas e consulte a decisão autoritativa antes de resolver qualquer uma. Teste reinício em cada fronteira."
+      }
+    ],
+    "example": {
+      "language": "sql",
+      "code": "SELECT gid, prepared, owner, database\nFROM pg_prepared_xacts\nORDER BY prepared;",
+      "explanation": "A consulta observa transações preparadas no PostgreSQL. Ela não identifica por si só se o correto é commit ou rollback; essa decisão pertence ao coordenador."
+    },
+    "sources": [
+      {
+        "label": "PostgreSQL — PREPARE TRANSACTION",
+        "url": "https://www.postgresql.org/docs/current/sql-prepare-transaction.html"
+      },
+      {
+        "label": "PostgreSQL — COMMIT PREPARED",
+        "url": "https://www.postgresql.org/docs/current/sql-commit-prepared.html"
+      }
+    ],
+    "related": [
+      "pessimistic-locking",
+      "raft-consensus",
+      "database-per-service"
+    ],
+    "prerequisites": [
+      "Coordenador com log durável e participantes compatíveis; no laboratório PostgreSQL, max_prepared_transactions precisa estar habilitado pelo administrador.",
+      "Ambiente descartável e procedimento para concluir todas as transações preparadas criadas durante os testes."
+    ],
+    "validation": [
+      "Interrompa o coordenador depois da preparação e confira que a recuperação consulta sua decisão persistida antes de agir.",
+      "Perca a resposta de commit de um participante e confirme que a retomada converge sem escolher uma decisão contraditória."
+    ],
+    "failureModes": [
+      "Uma transação preparada fica esquecida, mantendo locks e prejudicando manutenção e tráfego normal.",
+      "Um operador aborta manualmente um participante enquanto outro já seguiu a decisão de commit do coordenador."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "coord",
+          "label": "Coordenador durável",
+          "technology": "service",
+          "role": "Decisão",
+          "detail": "Registra o resultado global."
+        },
+        {
+          "id": "a",
+          "label": "Participante A",
+          "technology": "postgresql",
+          "role": "Preparação",
+          "detail": "Mantém alterações e locks."
+        },
+        {
+          "id": "b",
+          "label": "Participante B",
+          "technology": "postgresql",
+          "role": "Preparação",
+          "detail": "Segue a mesma decisão."
+        },
+        {
+          "id": "log",
+          "label": "Log do coordenador",
+          "technology": "database",
+          "role": "Recuperação",
+          "detail": "Preserva a decisão após falha."
+        }
+      ],
+      "edges": [
+        {
+          "from": "coord",
+          "to": "a",
+          "label": "Prepare e decisão"
+        },
+        {
+          "from": "coord",
+          "to": "b",
+          "label": "Prepare e decisão"
+        },
+        {
+          "from": "coord",
+          "to": "log",
+          "label": "Persistir decisão"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Verificar ambiente",
+        "detail": "Não altere a configuração automaticamente. O restante exige max_prepared_transactions maior que zero e um banco descartável.",
+        "language": "sql",
+        "code": "SHOW max_prepared_transactions;\nCREATE TABLE laboratorio_2pc (id integer PRIMARY KEY, estado text NOT NULL);"
+      },
+      {
+        "title": "Preparar um participante",
+        "detail": "Este teste mostra o ciclo local de um participante, não um coordenador distribuído completo.",
+        "language": "sql",
+        "code": "BEGIN;\nINSERT INTO laboratorio_2pc VALUES (1, 'confirmado');\nPREPARE TRANSACTION 'laboratorio-2pc-001';"
+      },
+      {
+        "title": "Concluir o laboratório",
+        "detail": "Execute fora de uma transação explícita, usando o mesmo banco e uma identidade autorizada. A decisão de commit aqui é manual e restrita ao teste.",
+        "language": "sql",
+        "code": "SELECT gid, prepared FROM pg_prepared_xacts WHERE gid = 'laboratorio-2pc-001';\nCOMMIT PREPARED 'laboratorio-2pc-001';\nSELECT * FROM laboratorio_2pc;"
+      }
+    ]
+  }
+]

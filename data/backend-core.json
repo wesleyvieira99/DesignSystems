@@ -1,0 +1,3514 @@
+[
+  {
+    "id": "mvc",
+    "name": "MVC",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Fundamentos",
+    "tags": [
+      "backend",
+      "HTTP",
+      "separação de responsabilidades"
+    ],
+    "summary": "Separe entrada HTTP, regras de negócio e apresentação para que uma mudança de tela não espalhe lógica pelo servidor.",
+    "overview": "Model–View–Controller organiza responsabilidades de apresentação. Em uma aplicação web renderizada no servidor, o controller recebe a requisição, seleciona uma operação e prepara a resposta; o model representa dados e comportamento do domínio; a view transforma dados de apresentação em HTML. Esses nomes variam entre frameworks: Django usa a nomenclatura model, template e view. MVC não determina como distribuir serviços, nem exige três processos. A implementação didática abaixo usa Flask no mesmo processo e um modelo em memória. O objetivo é tornar o caminho da requisição visível antes de acrescentar persistência, autenticação e infraestrutura. MVC não exige framework: o portal também inclui um laboratório independente com Python padrão e SQLite; seus arquivos e rotas são próprios, diferentes deste exemplo Flask.",
+    "when": [
+      "Aplicações com páginas renderizadas no servidor e operações que precisam ser reutilizadas fora de uma tela específica.",
+      "Equipes que encontram regras de cálculo, SQL e formatação HTML misturados dentro da mesma função de rota."
+    ],
+    "benefits": [
+      "Uma regra do modelo pode ser exercitada sem iniciar servidor, navegador ou banco de dados.",
+      "Templates podem mudar estrutura visual sem alterar o significado de uma operação de negócio."
+    ],
+    "tradeoffs": [
+      "Três arquivos vazios não produzem separação; um controller pode continuar concentrando todas as decisões do sistema.",
+      "Aplicações somente JSON não possuem necessariamente uma view HTML, embora preservem a separação entre transporte e domínio."
+    ],
+    "avoid": [
+      "Evite chamar toda classe de banco de 'model' e esquecer que invariantes do negócio também precisam de um lugar explícito."
+    ],
+    "steps": [
+      {
+        "title": "Modele uma operação",
+        "detail": "Escolha um caso pequeno, como listar pedidos. Defina quais dados representam o pedido e quais regras devem continuar válidas quando a mesma operação for chamada por uma tarefa agendada."
+      },
+      {
+        "title": "Mantenha a entrada fina",
+        "detail": "Converta parâmetros HTTP, identifique o usuário e chame uma operação de aplicação. Traduza erros conhecidos para respostas adequadas; não exponha detalhes internos da persistência ao navegador."
+      },
+      {
+        "title": "Prepare dados de apresentação",
+        "detail": "Entregue ao template apenas os campos necessários. Faça formatação na apresentação e mantenha cálculos de preço, autorização e transições de estado fora do HTML."
+      },
+      {
+        "title": "Exercite as três fronteiras",
+        "detail": "Teste o modelo diretamente, o controller com um cliente HTTP de teste e o template com dados representativos. Depois substitua a lista em memória por persistência sem mudar a rota pública."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from flask import Flask, render_template_string\napp = Flask(__name__)\n\ndef listar_pedidos():\n    return [{'id': 1, 'total': 12500}]\n\n@app.get('/pedidos')\ndef pedidos():\n    return render_template_string(\n        '<h1>Pedidos</h1>{% for p in pedidos %}<p>#{{ p.id }}: {{ p.total }} centavos</p>{% endfor %}',\n        pedidos=listar_pedidos())",
+      "explanation": "Salve como app.py. A função listar_pedidos representa a operação do modelo, a rota coordena e o template apresenta. A lista não é persistente; o servidor de desenvolvimento serve apenas ao laboratório local."
+    },
+    "sources": [
+      {
+        "label": "Django — relação entre MVC e MTV",
+        "url": "https://docs.djangoproject.com/en/5.2/faq/general/"
+      },
+      {
+        "label": "Flask — aplicação, rotas e templates",
+        "url": "https://flask.palletsprojects.com/en/stable/quickstart/"
+      }
+    ],
+    "related": [
+      "service-layer",
+      "repository",
+      "rest"
+    ],
+    "prerequisites": [
+      "Python 3.11 ou superior, ambiente virtual e conhecimentos de funções, importações e requisições HTTP.",
+      "Entender que dados em memória desaparecem ao reiniciar e que uma aplicação real precisa de controle de acesso."
+    ],
+    "validation": [
+      "Altere o template mantendo listar_pedidos intacta e confirme que os mesmos dados continuam disponíveis no teste do modelo.",
+      "Consulte /pedidos e uma rota inexistente; confira HTML, código de sucesso e resposta 404 sem traceback exposto."
+    ],
+    "failureModes": [
+      "SQL e regras dentro do template tornam a apresentação dependente de infraestrutura e dificultam testar cenários de erro.",
+      "Objetos globais mutáveis usados como banco podem vazar estado entre usuários e divergir entre processos."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "browser",
+          "label": "Navegador",
+          "technology": "client",
+          "role": "Entrada",
+          "detail": "Solicita a página de pedidos."
+        },
+        {
+          "id": "controller",
+          "label": "Controller HTTP",
+          "technology": "python",
+          "role": "Coordenação",
+          "detail": "Interpreta a requisição e chama o modelo."
+        },
+        {
+          "id": "model",
+          "label": "Modelo de pedidos",
+          "technology": "service",
+          "role": "Negócio",
+          "detail": "Produz os dados e protege regras."
+        },
+        {
+          "id": "view",
+          "label": "Template HTML",
+          "technology": "python",
+          "role": "Apresentação",
+          "detail": "Renderiza os dados sem executar operações de negócio."
+        }
+      ],
+      "edges": [
+        {
+          "from": "browser",
+          "to": "controller",
+          "label": "GET /pedidos"
+        },
+        {
+          "from": "controller",
+          "to": "model",
+          "label": "listar pedidos"
+        },
+        {
+          "from": "model",
+          "to": "controller",
+          "label": "dados"
+        },
+        {
+          "from": "controller",
+          "to": "view",
+          "label": "dados de apresentação"
+        },
+        {
+          "from": "view",
+          "to": "browser",
+          "label": "HTML"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Instale o laboratório",
+        "detail": "Em uma pasta vazia e com o ambiente virtual ativo, instale Flask pelo mesmo interpretador que executará a aplicação.",
+        "language": "shell",
+        "code": "python -m pip install 'Flask>=3.1,<4'"
+      },
+      {
+        "title": "Execute a aplicação",
+        "detail": "Copie o exemplo principal para app.py. Inicie localmente e mantenha esse terminal aberto enquanto faz a requisição do próximo passo.",
+        "language": "shell",
+        "code": "python -m flask --app app run --port 5000"
+      },
+      {
+        "title": "Confirme o caminho HTTP",
+        "detail": "Em outro terminal, consulte a página. Verifique o status 200 e a presença do pedido; mude o título no template e repita a consulta.",
+        "language": "shell",
+        "code": "curl -i http://127.0.0.1:5000/pedidos"
+      }
+    ]
+  },
+  {
+    "id": "mvp",
+    "name": "MVP — Model–View–Presenter",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "apresentação",
+      "testabilidade",
+      "fronteiras"
+    ],
+    "summary": "Isole a coordenação da apresentação em um presenter testável e mantenha regras de negócio no modelo ou nos serviços.",
+    "overview": "MVP é um padrão de apresentação, historicamente associado a interfaces interativas. O presenter recebe ações, consulta o modelo e entrega informações para uma view através de um contrato. Em uma variante de view passiva, a view delega quase todas as decisões de apresentação ao presenter. Para quem estuda backend, a utilidade está em reconhecer a fronteira: um presenter pode preparar uma resposta de tela, mas não substitui serviços, autorização, transações ou persistência. Um servidor que apenas fornece uma API não se torna MVP porque possui DTOs. O exemplo usa uma view de terminal para demonstrar a separação sem depender de uma biblioteca gráfica.",
+    "when": [
+      "Aplicações com apresentação complexa, nas quais formatação e coordenação precisam ser testadas sem abrir a interface.",
+      "Integrações que recebem dados de um serviço backend e precisam transformá-los para uma tela ou relatório específico."
+    ],
+    "benefits": [
+      "Uma view falsa captura a saída do presenter e permite verificar mensagens sem infraestrutura visual.",
+      "Decisões de apresentação ficam separadas das regras que determinam se uma operação de negócio é permitida."
+    ],
+    "tradeoffs": [
+      "Contratos extensos entre presenter e view podem exigir muitas chamadas e tornar pequenas mudanças visuais trabalhosas.",
+      "Adicionar presenters a respostas JSON triviais pode aumentar a quantidade de classes sem melhorar manutenção ou clareza."
+    ],
+    "avoid": [
+      "Evite colocar autorização no presenter como única defesa: o backend precisa validar a operação mesmo quando a interface é contornada."
+    ],
+    "steps": [
+      {
+        "title": "Defina o papel da view",
+        "detail": "Liste as ações da pessoa e os estados que a interface precisa mostrar. Separe informação de apresentação, como rótulos, de decisões de negócio, como limite de crédito."
+      },
+      {
+        "title": "Crie um contrato pequeno",
+        "detail": "Ofereça operações como mostrar_resumo e mostrar_erro. Prefira dados completos e imutáveis a dezenas de setters que deixam a view temporariamente inconsistente durante a atualização."
+      },
+      {
+        "title": "Implemente a coordenação",
+        "detail": "Receba o serviço e a view no construtor. O presenter chama o serviço, traduz resultados esperados e deixa falhas inesperadas seguirem para a política de tratamento da aplicação."
+      },
+      {
+        "title": "Teste apresentação e integração",
+        "detail": "Use uma view que guarda chamadas para conferir textos e estados. Em outro teste, integre com o serviço real e valide autorização, falhas de rede e atualização da tela."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "class Presenter:\n    def __init__(self, consultar, view):\n        self.consultar, self.view = consultar, view\n\n    def carregar(self):\n        saldo = self.consultar()\n        self.view.mostrar(f'Saldo: {saldo} centavos')\n\nclass ConsoleView:\n    def mostrar(self, texto):\n        print(texto)\n\nPresenter(lambda: 12500, ConsoleView()).carregar()",
+      "explanation": "Execute com Python. A função injetada simula uma consulta backend, e o presenter prepara uma frase. O console é uma view didática; não existe transporte HTTP nem sincronização automática de dados neste trecho."
+    },
+    "sources": [
+      {
+        "label": "Martin Fowler — arquiteturas de interface e MVP",
+        "url": "https://martinfowler.com/eaaDev/uiArchs.html"
+      },
+      {
+        "label": "Fowler — Passive View",
+        "url": "https://martinfowler.com/eaaDev/PassiveScreen.html"
+      }
+    ],
+    "related": [
+      "mvc",
+      "mvvm",
+      "dependency-injection"
+    ],
+    "prerequisites": [
+      "Conhecer objetos, composição e a distinção entre dados de domínio e informações preparadas para uma tela.",
+      "Ter uma necessidade de apresentação identificada; o padrão não é uma arquitetura de implantação de serviços."
+    ],
+    "validation": [
+      "Troque ConsoleView por uma implementação que guarde texto e confirme a saída sem capturar o terminal.",
+      "Simule uma consulta que falha e decida explicitamente se a interface mantém dados anteriores ou mostra um estado de erro."
+    ],
+    "failureModes": [
+      "Presenters que alteram entidades e fazem commit misturam apresentação com transação, dificultando reuso por outras entradas.",
+      "Referências circulares e inscrições em eventos não removidas podem manter views antigas vivas e atualizar telas que já foram fechadas."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "view",
+          "label": "View",
+          "technology": "client",
+          "role": "Apresentação",
+          "detail": "Exibe os dados e comunica ações."
+        },
+        {
+          "id": "presenter",
+          "label": "Presenter",
+          "technology": "service",
+          "role": "Coordenação visual",
+          "detail": "Prepara estados específicos da interface."
+        },
+        {
+          "id": "backend",
+          "label": "Serviço backend",
+          "technology": "python",
+          "role": "Aplicação",
+          "detail": "Executa operações autorizadas e devolve resultados."
+        }
+      ],
+      "edges": [
+        {
+          "from": "view",
+          "to": "presenter",
+          "label": "ação"
+        },
+        {
+          "from": "presenter",
+          "to": "backend",
+          "label": "consulta"
+        },
+        {
+          "from": "backend",
+          "to": "presenter",
+          "label": "resultado"
+        },
+        {
+          "from": "presenter",
+          "to": "view",
+          "label": "estado para exibir"
+        }
+      ]
+    }
+  },
+  {
+    "id": "mvvm",
+    "name": "MVVM — Model–View–ViewModel",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "apresentação",
+      "estado",
+      "contrato de API"
+    ],
+    "summary": "Organize estado e comandos da interface em um view model, mantendo o backend responsável pelas regras e pela integridade.",
+    "overview": "MVVM também pertence à arquitetura de apresentação. O view model expõe estado e comandos consumidos pela view, frequentemente por mecanismos de binding do framework cliente. O model representa os dados e comportamentos necessários à aplicação. Em um sistema com backend remoto, o view model utiliza um cliente de API; regras críticas continuam sendo verificadas no servidor. Uma resposta JSON preparada para uma página pode ser um modelo de apresentação, mas isso sozinho não caracteriza todo o padrão MVVM. O exemplo Python ilustra a transformação de estado e a chamada injetada, sem simular um binding inexistente ou exigir que o servidor conheça controles da interface.",
+    "when": [
+      "Clientes web, desktop ou móveis que precisam coordenar carregamento, dados, ações disponíveis e mensagens de erro.",
+      "Equipes backend que desejam compreender o consumidor da API e evitar expor entidades persistidas diretamente como contrato de tela."
+    ],
+    "benefits": [
+      "Estados explícitos permitem testar carregamento e erro sem clicar manualmente em cada combinação da interface.",
+      "O cliente pode adaptar a apresentação sem obrigar o domínio backend a incorporar conceitos como abas e botões."
+    ],
+    "tradeoffs": [
+      "Sincronizar estado local e remoto introduz problemas de respostas atrasadas, invalidação e conflitos de edição.",
+      "Bindings e observação variam entre frameworks; o código de um cliente não deve ser transferido mecanicamente para outro."
+    ],
+    "avoid": [
+      "Evite considerar canEdit ou podeSalvar recebido da interface uma autorização suficiente para alterar dados no servidor."
+    ],
+    "steps": [
+      {
+        "title": "Descreva os estados observáveis",
+        "detail": "Defina dados, carregamento, erro e ações disponíveis. Faça cada estado representar uma situação coerente, evitando combinações impossíveis como sucesso e falha simultâneos."
+      },
+      {
+        "title": "Isole o cliente remoto",
+        "detail": "Crie uma função ou objeto para acessar a API. Ele deve traduzir transporte e erros técnicos, permitindo que testes entreguem resultados determinísticos sem abrir conexões."
+      },
+      {
+        "title": "Implemente comandos e atualização",
+        "detail": "Ao carregar ou salvar, atualize o estado de forma previsível. Defina como cancelar ou ignorar respostas antigas quando uma nova solicitação substitui a anterior."
+      },
+      {
+        "title": "Valide a fronteira com o servidor",
+        "detail": "Exercite erros de autorização, validação e concorrência. Confira que o backend revalida as regras e que o cliente explica o resultado sem assumir sucesso apenas pela animação."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "class SaldoViewModel:\n    def __init__(self, consultar):\n        self.consultar = consultar\n        self.estado = {'situacao': 'inicial'}\n\n    def carregar(self):\n        self.estado = {'situacao': 'carregando'}\n        try:\n            self.estado = {'situacao': 'pronto', 'saldo': self.consultar()}\n        except TimeoutError:\n            self.estado = {'situacao': 'erro', 'mensagem': 'Tente novamente.'}\n\nvm = SaldoViewModel(lambda: 12500)\nvm.carregar()\nprint(vm.estado)",
+      "explanation": "Execute o arquivo com Python para observar o estado final. Trata-se de um modelo didático de apresentação; uma interface real precisaria observar mudanças e tratar chamadas assíncronas sem bloquear sua thread principal."
+    },
+    "sources": [
+      {
+        "label": "Microsoft — padrão MVVM",
+        "url": "https://learn.microsoft.com/en-us/dotnet/architecture/maui/mvvm"
+      },
+      {
+        "label": "Microsoft — MVVM Toolkit",
+        "url": "https://learn.microsoft.com/en-us/dotnet/communitytoolkit/mvvm/"
+      }
+    ],
+    "related": [
+      "mvp",
+      "mvc",
+      "rest"
+    ],
+    "prerequisites": [
+      "Entender diferença entre estado de apresentação e estado persistente de negócio, incluindo respostas que chegam fora de ordem.",
+      "Conhecer os mecanismos de binding e comandos do framework cliente que será utilizado no projeto."
+    ],
+    "validation": [
+      "Injete uma consulta que lance TimeoutError e confira a mensagem, a ausência de dados novos e a possibilidade de tentar novamente.",
+      "No sistema real, envie duas consultas com tempos diferentes e confirme que a resposta antiga não sobrescreve a seleção mais recente."
+    ],
+    "failureModes": [
+      "View models globais compartilhados entre sessões podem expor dados de uma pessoa para outra ou manter informações antigas.",
+      "A interface pode habilitar uma ação com dados vencidos; sem controle de concorrência backend, uma edição sobrescreve mudanças legítimas."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "view",
+          "label": "Interface",
+          "technology": "client",
+          "role": "Apresentação",
+          "detail": "Observa estado e dispara comandos."
+        },
+        {
+          "id": "vm",
+          "label": "View model",
+          "technology": "service",
+          "role": "Estado visual",
+          "detail": "Controla carregamento e dados da tela."
+        },
+        {
+          "id": "api",
+          "label": "API backend",
+          "technology": "python",
+          "role": "Fronteira remota",
+          "detail": "Revalida autorização e regras de negócio."
+        },
+        {
+          "id": "db",
+          "label": "Persistência",
+          "technology": "postgresql",
+          "role": "Dados",
+          "detail": "Armazena o estado independente da tela."
+        }
+      ],
+      "edges": [
+        {
+          "from": "view",
+          "to": "vm",
+          "label": "comando"
+        },
+        {
+          "from": "vm",
+          "to": "api",
+          "label": "requisição"
+        },
+        {
+          "from": "api",
+          "to": "db",
+          "label": "consulta autorizada"
+        },
+        {
+          "from": "api",
+          "to": "vm",
+          "label": "resultado"
+        },
+        {
+          "from": "vm",
+          "to": "view",
+          "label": "estado atualizado"
+        }
+      ]
+    }
+  },
+  {
+    "id": "rest",
+    "name": "REST e recursos HTTP",
+    "category": "foundation",
+    "kind": "Fundamento",
+    "organization": "Engenharia de software",
+    "level": "Fundamentos",
+    "tags": [
+      "HTTP",
+      "API",
+      "contratos"
+    ],
+    "summary": "Desenhe uma interface orientada a recursos, respeitando a semântica HTTP e as restrições que tornam a Web interoperável.",
+    "overview": "REST é um estilo arquitetural definido por restrições como separação cliente-servidor, ausência de estado de sessão no servidor entre requisições, interface uniforme, cache e camadas. Não significa apenas JSON sobre HTTP, nem exige que cada tabela vire um endpoint. Para implementar uma API, comece pelos recursos e pelas transições que o consumidor pode executar. Métodos, códigos, cabeçalhos e representações formam o contrato. O laboratório mostra uma consulta de pedido e um link para o próprio recurso; ele ensina parte da interface uniforme, sem alegar cobrir sozinho todas as restrições de REST ou um sistema completo de hipermídia.",
+    "when": [
+      "Integrações com clientes variados que precisam utilizar ferramentas HTTP comuns, intermediários e contratos legíveis.",
+      "Operações orientadas a recursos, em que semântica de leitura, criação e atualização pode ser expressa de maneira clara."
+    ],
+    "benefits": [
+      "Métodos e códigos conhecidos reduzem acordos particulares entre cada cliente e implementação do servidor.",
+      "Representações e links permitem separar o identificador público da organização interna de classes e tabelas."
+    ],
+    "tradeoffs": [
+      "Fluxos compostos podem exigir várias chamadas e decisões cuidadosas sobre granularidade dos recursos.",
+      "Compatibilidade envolve mais que formato JSON: alterar significado, ordenação ou política de erro também pode quebrar consumidores."
+    ],
+    "avoid": [
+      "Evite modificar dados em GET ou devolver sempre 200 para esconder falhas que clientes e intermediários precisam reconhecer."
+    ],
+    "steps": [
+      {
+        "title": "Defina recursos e invariantes",
+        "detail": "Escolha nomes e identificadores estáveis. Descreva operações permitidas, autorização por recurso e o que representa ausência, conflito e entrada inválida antes de escrever endpoints."
+      },
+      {
+        "title": "Mapeie a semântica HTTP",
+        "detail": "Use métodos compatíveis com a operação e documente os códigos esperados. Planeje paginação e filtros para listas, evitando respostas ilimitadas que crescem silenciosamente."
+      },
+      {
+        "title": "Controle representações e cache",
+        "detail": "Selecione campos públicos e tipos estáveis. Defina cache explicitamente; informações privadas exigem políticas adequadas ao usuário e ao ambiente, não cabeçalhos copiados de uma página pública."
+      },
+      {
+        "title": "Evolua com consumidores reais",
+        "detail": "Crie exemplos de sucesso e erro, valide clientes existentes e acrescente campos compatíveis antes de remover contratos. Registre a política de descontinuação e os limites operacionais."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from flask import Flask, abort, jsonify\napp = Flask(__name__)\n\n@app.get('/pedidos/<int:pedido_id>')\ndef pedido(pedido_id):\n    if pedido_id != 1:\n        abort(404)\n    resposta = jsonify(id=1, total_centavos=12500,\n        links={'self': '/pedidos/1'})\n    resposta.headers['Cache-Control'] = 'no-store'\n    return resposta",
+      "explanation": "O exemplo em app.py retorna um recurso conhecido e 404 para outro identificador. no-store simplifica o laboratório; produção deve definir política própria e respostas de erro consistentes com o contrato da API."
+    },
+    "sources": [
+      {
+        "label": "Roy Fielding — REST",
+        "url": "https://ics.uci.edu/~fielding/pubs/dissertation/rest_arch_style.htm"
+      },
+      {
+        "label": "RFC 9110 — semântica HTTP",
+        "url": "https://www.rfc-editor.org/rfc/rfc9110.html"
+      },
+      {
+        "label": "Flask — respostas HTTP",
+        "url": "https://flask.palletsprojects.com/en/stable/quickstart/"
+      }
+    ],
+    "related": [
+      "graphql",
+      "grpc",
+      "ports-contracts"
+    ],
+    "prerequisites": [
+      "Conhecer URL, cabeçalhos, métodos HTTP e a diferença entre autenticação e autorização por objeto.",
+      "Ter Python com Flask instalado em ambiente virtual e uma ferramenta para inspecionar respostas HTTP."
+    ],
+    "validation": [
+      "Consulte os identificadores 1 e 2 e confira status, conteúdo e política de cache, em vez de verificar apenas o corpo.",
+      "No projeto real, teste paginação, valores limites e acesso ao recurso de outra pessoa com credenciais válidas."
+    ],
+    "failureModes": [
+      "Retornar entidades completas pode expor campos internos, credenciais ou dados que o consumidor não deveria receber.",
+      "Repetir automaticamente uma operação de escrita após timeout pode gerar duplicação se o contrato não prevê a situação."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Consumidor HTTP",
+          "technology": "client",
+          "role": "Entrada",
+          "detail": "Solicita uma representação por URL."
+        },
+        {
+          "id": "api",
+          "label": "API de pedidos",
+          "technology": "python",
+          "role": "Contrato",
+          "detail": "Valida a requisição e mapeia erros."
+        },
+        {
+          "id": "resource",
+          "label": "Recurso pedido",
+          "technology": "service",
+          "role": "Negócio",
+          "detail": "Produz somente os dados autorizados."
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "api",
+          "label": "GET /pedidos/1"
+        },
+        {
+          "from": "api",
+          "to": "resource",
+          "label": "consulta"
+        },
+        {
+          "from": "resource",
+          "to": "api",
+          "label": "representação"
+        },
+        {
+          "from": "api",
+          "to": "client",
+          "label": "status, cabeçalhos e JSON"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Prepare as dependências",
+        "detail": "Use uma pasta própria e instale Flask no ambiente virtual. O comando python deve apontar para esse ambiente em todos os passos.",
+        "language": "shell",
+        "code": "python -m pip install 'Flask>=3.1,<4'"
+      },
+      {
+        "title": "Inicie a API local",
+        "detail": "Salve o código principal em app.py e rode o servidor de desenvolvimento. A aplicação escuta somente na máquina local por padrão.",
+        "language": "shell",
+        "code": "python -m flask --app app run --port 5000"
+      },
+      {
+        "title": "Compare sucesso e ausência",
+        "detail": "Em outro terminal, faça as duas consultas. A diferença observável de status faz parte do contrato e deve permanecer estável durante refatorações internas.",
+        "language": "shell",
+        "code": "curl -i http://127.0.0.1:5000/pedidos/1\ncurl -i http://127.0.0.1:5000/pedidos/2"
+      }
+    ]
+  },
+  {
+    "id": "graphql",
+    "name": "GraphQL",
+    "category": "foundation",
+    "kind": "Fundamento",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "API",
+      "schema",
+      "resolvers"
+    ],
+    "summary": "Ofereça um schema tipado para que consumidores selecionem campos, mantendo controle de autorização, custo e acesso a dados.",
+    "overview": "GraphQL define uma linguagem de consultas, um sistema de tipos e regras de execução. O schema descreve o que pode ser solicitado; resolvers obtêm os dados de cada campo. O servidor continua responsável por autorização, limites e regras de negócio. GraphQL não é banco de dados e não elimina a necessidade de modelagem ou observabilidade. Uma consulta pequena pode acionar muitas leituras, especialmente quando listas chamam resolvers individuais. O laboratório utiliza graphql-core para executar uma consulta em Python, sem servidor HTTP: isso permite estudar schema, validação e resultado antes de adicionar transporte, sessão e políticas operacionais.",
+    "when": [
+      "Clientes com necessidades de dados diferentes que precisam selecionar campos sem criar um endpoint exclusivo para cada tela.",
+      "Domínios em que navegar relações tem valor, desde que a equipe consiga controlar custo, limites e autorização por campo ou entidade."
+    ],
+    "benefits": [
+      "Um schema explícito permite descobrir tipos e validar consultas antes de executar os resolvers.",
+      "Consumidores podem pedir subconjuntos de campos, reduzindo acoplamento ao formato de uma única resposta fixa."
+    ],
+    "tradeoffs": [
+      "Flexibilidade de consulta exige controle de complexidade, profundidade, quantidade de resultados e execução de operações caras.",
+      "Cache HTTP convencional pode ser menos direto; cache por entidade e consulta requer política explícita de validade e autorização."
+    ],
+    "avoid": [
+      "Evite expor automaticamente todo o modelo do ORM ou assumir que o schema tipado substitui autorização e validação de negócio."
+    ],
+    "steps": [
+      {
+        "title": "Modele o contrato público",
+        "detail": "Desenhe tipos com significado para os consumidores, incluindo nulabilidade e identificadores. Defina o comportamento de entidade ausente e de campos não autorizados."
+      },
+      {
+        "title": "Implemente resolvers pequenos",
+        "detail": "Delegue regras a serviços de aplicação e agrupe leituras quando necessário. Meça a quantidade de consultas ao banco para listas e relações aninhadas desde o primeiro piloto."
+      },
+      {
+        "title": "Controle custo e contexto",
+        "detail": "Transmita identidade e dependências por contexto, estabeleça limites de execução e restrinja operações conforme o caso. Não confunda introspecção com permissão de acessar os dados."
+      },
+      {
+        "title": "Evolua e observe",
+        "detail": "Teste consultas reais, documente descontinuação de campos e monitore operações por nome e custo. Verifique resultados parciais, pois data e errors podem aparecer juntos."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from graphql import build_schema, graphql_sync\nschema = build_schema('type Query { saldoCentavos: Int! }')\nschema.get_type('Query').fields['saldoCentavos'].resolve = lambda obj, info: 12500\nresultado = graphql_sync(schema, '{ saldoCentavos }')\nassert resultado.errors is None\nprint(resultado.data)",
+      "explanation": "Salve em consulta.py. O resolver fornece um inteiro e a execução produz um dicionário com o campo solicitado. Não há acesso a banco ou autenticação; essas dependências entram na aplicação que hospeda o schema."
+    },
+    "sources": [
+      {
+        "label": "GraphQL — fundamentos",
+        "url": "https://graphql.org/learn/"
+      },
+      {
+        "label": "GraphQL-core — execução de consultas",
+        "url": "https://graphql-core-3.readthedocs.io/en/latest/usage/queries.html"
+      }
+    ],
+    "related": [
+      "rest",
+      "service-layer",
+      "ports-contracts"
+    ],
+    "prerequisites": [
+      "Conhecer objetos JSON, funções e a diferença entre o schema público e a estrutura interna de persistência.",
+      "Python 3.11 ou superior, ambiente virtual e atenção à compatibilidade entre graphql-core e a versão da especificação utilizada."
+    ],
+    "validation": [
+      "Consulte saldoCentavos e depois um campo inexistente, confirmando a rejeição da consulta antes da execução útil.",
+      "Em uma integração real, conte acessos ao banco para dez e cem itens e imponha limites que impeçam crescimento inesperado."
+    ],
+    "failureModes": [
+      "O problema N+1 aparece quando cada item de uma lista provoca uma consulta adicional, degradando latência e capacidade.",
+      "Erros internos de resolvers podem revelar informações sensíveis se mensagens e extensões forem serializadas sem uma política pública."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Cliente GraphQL",
+          "technology": "client",
+          "role": "Consulta",
+          "detail": "Seleciona campos do schema."
+        },
+        {
+          "id": "schema",
+          "label": "Schema e execução",
+          "technology": "python",
+          "role": "Contrato",
+          "detail": "Valida tipos e resolve a operação."
+        },
+        {
+          "id": "resolver",
+          "label": "Resolvers",
+          "technology": "service",
+          "role": "Adaptação",
+          "detail": "Chamam serviços respeitando identidade e limites."
+        },
+        {
+          "id": "db",
+          "label": "Dados de negócio",
+          "technology": "postgresql",
+          "role": "Persistência",
+          "detail": "Responde a consultas agrupadas quando adequado."
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "schema",
+          "label": "operação e variáveis"
+        },
+        {
+          "from": "schema",
+          "to": "resolver",
+          "label": "campos selecionados"
+        },
+        {
+          "from": "resolver",
+          "to": "db",
+          "label": "consultas"
+        },
+        {
+          "from": "schema",
+          "to": "client",
+          "label": "data e errors"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Instale o executor",
+        "detail": "O pacote é graphql-core, embora o módulo importado se chame graphql. Instale no ambiente virtual do laboratório e mantenha a versão registrada no projeto.",
+        "language": "shell",
+        "code": "python -m pip install 'graphql-core>=3.2,<3.4'"
+      },
+      {
+        "title": "Execute uma consulta válida",
+        "detail": "Copie o exemplo principal para consulta.py. O resultado esperado contém saldoCentavos com valor 12500; qualquer erro de importação deve ser investigado no interpretador ativo.",
+        "language": "shell",
+        "code": "python consulta.py"
+      },
+      {
+        "title": "Observe a validação do schema",
+        "detail": "Após o código principal, execute este trecho. O campo inexistente deve gerar errors; ele não passa a existir por estar escrito na consulta.",
+        "language": "python",
+        "code": "invalido = graphql_sync(schema, '{ saldoEmReais }')\nassert invalido.errors\nprint(invalido.errors[0].message)"
+      }
+    ]
+  },
+  {
+    "id": "grpc",
+    "name": "gRPC",
+    "category": "foundation",
+    "kind": "Fundamento",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "RPC",
+      "Protobuf",
+      "contratos"
+    ],
+    "summary": "Implemente chamadas remotas com contratos explícitos, código gerado e políticas de prazo, erro e compatibilidade.",
+    "overview": "gRPC oferece chamadas remotas orientadas a serviços e normalmente utiliza Protocol Buffers para definir mensagens e métodos. O arquivo .proto é compartilhado como contrato; ferramentas geram código de cliente e servidor. Há chamadas unárias e modalidades de streaming. A semelhança com uma chamada de função não elimina a rede: uma resposta pode atrasar, uma conexão pode falhar e o cliente pode perder a confirmação de uma operação concluída. O laboratório usa uma chamada unária local e sem criptografia, apropriada apenas para aprendizado. Ele evidencia contrato, implementação e cliente antes de incorporar identidade, TLS e descoberta de serviços.",
+    "when": [
+      "Comunicação interna entre serviços que precisam de contratos tipados e bibliotecas cliente geradas para linguagens distintas.",
+      "Fluxos que se beneficiam de streaming e nos quais a equipe consegue operar proxies e clientes compatíveis com gRPC."
+    ],
+    "benefits": [
+      "A geração de código reduz divergências mecânicas entre mensagens e assinaturas implementadas pelos consumidores.",
+      "Contratos versionados permitem revisar mudanças de campos antes de publicar uma implementação incompatível."
+    ],
+    "tradeoffs": [
+      "Depuração exige conhecer status gRPC, deadlines e ferramentas do protocolo, além de simplesmente abrir uma URL no navegador.",
+      "Clientes de navegador podem precisar de soluções específicas, como gRPC-Web, e de infraestrutura compatível com essa escolha."
+    ],
+    "avoid": [
+      "Evite omitir deadlines ou reutilizar números de campos Protobuf removidos, pois isso pode produzir incompatibilidades difíceis de detectar."
+    ],
+    "steps": [
+      {
+        "title": "Defina mensagens estáveis",
+        "detail": "Escolha nomes e tipos com significado, mantenha números de campo estáveis e planeje campos opcionais. Separe contrato de transporte das classes internas do domínio."
+      },
+      {
+        "title": "Gere e implemente o serviço",
+        "detail": "Versione a fonte .proto e reproduza a geração no build. O handler valida a entrada, aplica autorização e chama a operação de aplicação, traduzindo falhas conhecidas para status públicos."
+      },
+      {
+        "title": "Estabeleça limites de chamada",
+        "detail": "Configure prazo no cliente e propague cancelamento quando possível. Limite tamanhos de mensagem e concorrência; uma conexão saudável não garante que o serviço tenha capacidade disponível."
+      },
+      {
+        "title": "Teste evolução e falhas",
+        "detail": "Execute cliente antigo contra servidor novo e simule atraso maior que o deadline. Observe status, latência e quantidade de chamadas em andamento, sem repetir escritas cegamente."
+      }
+    ],
+    "example": {
+      "language": "protobuf",
+      "code": "syntax = \"proto3\";\npackage saldo;\nservice Carteira { rpc Consultar (Consulta) returns (Resposta); }\nmessage Consulta { string conta_id = 1; }\nmessage Resposta { int64 centavos = 1; }",
+      "explanation": "Salve como saldo.proto. Os arquivos saldo_pb2.py e saldo_pb2_grpc.py serão gerados pelo compilador; não são módulos que você deve escrever manualmente. O saldo fixo simplifica o estudo do transporte."
+    },
+    "sources": [
+      {
+        "label": "gRPC Python — quickstart",
+        "url": "https://grpc.io/docs/languages/python/quickstart/"
+      },
+      {
+        "label": "gRPC — deadlines",
+        "url": "https://grpc.io/docs/guides/deadlines/"
+      },
+      {
+        "label": "Protocol Buffers — guia proto3",
+        "url": "https://protobuf.dev/programming-guides/proto3/"
+      }
+    ],
+    "related": [
+      "rest",
+      "ports-contracts",
+      "service-layer"
+    ],
+    "prerequisites": [
+      "Python 3.11 ou superior, ambiente virtual e entendimento de cliente, servidor, porta local e processo em execução.",
+      "Saber que insecure_channel e add_insecure_port não oferecem TLS e não devem ser copiados para uma exposição pública."
+    ],
+    "validation": [
+      "Execute servidor e cliente em terminais diferentes e confirme 12500; pare o servidor e observe uma falha de comunicação.",
+      "Introduza atraso controlado maior que dois segundos no servidor e confira que o cliente encerra a chamada pelo prazo configurado."
+    ],
+    "failureModes": [
+      "Uma escrita pode terminar no servidor após o cliente receber deadline excedido; uma repetição sem identidade da operação pode duplicar efeitos.",
+      "Gerar stubs com ferramentas incompatíveis com o runtime instalado causa erros antes de qualquer chamada de rede."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Stub cliente",
+          "technology": "python",
+          "role": "Consumidor",
+          "detail": "Serializa Consulta e define deadline."
+        },
+        {
+          "id": "server",
+          "label": "Servidor gRPC",
+          "technology": "python",
+          "role": "Transporte",
+          "detail": "Decodifica mensagem e chama o handler."
+        },
+        {
+          "id": "app",
+          "label": "Serviço de carteira",
+          "technology": "service",
+          "role": "Negócio",
+          "detail": "Consulta saldo autorizado e retorna centavos."
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "server",
+          "label": "RPC Consultar"
+        },
+        {
+          "from": "server",
+          "to": "app",
+          "label": "operação"
+        },
+        {
+          "from": "app",
+          "to": "server",
+          "label": "saldo"
+        },
+        {
+          "from": "server",
+          "to": "client",
+          "label": "Resposta ou status"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Instale e gere o contrato",
+        "detail": "Salve o exemplo como saldo.proto na pasta atual. Instale runtime e gerador no mesmo ambiente e gere os dois módulos importados pelos próximos arquivos.",
+        "language": "shell",
+        "code": "python -m pip install grpcio grpcio-tools\npython -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. saldo.proto"
+      },
+      {
+        "title": "Execute o servidor",
+        "detail": "Salve como servidor.py e rode python servidor.py. Mantenha o processo aberto. O endereço de escuta limita o laboratório ao computador local.",
+        "language": "python",
+        "code": "from concurrent import futures\nimport grpc\nimport saldo_pb2 as pb\nimport saldo_pb2_grpc as rpc\n\nclass Carteira(rpc.CarteiraServicer):\n    def Consultar(self, request, context):\n        if not request.conta_id:\n            context.abort(grpc.StatusCode.INVALID_ARGUMENT, 'conta_id obrigatório')\n        return pb.Resposta(centavos=12500)\n\nserver = grpc.server(futures.ThreadPoolExecutor(max_workers=2))\nrpc.add_CarteiraServicer_to_server(Carteira(), server)\nserver.add_insecure_port('127.0.0.1:50051')\nserver.start()\nserver.wait_for_termination()"
+      },
+      {
+        "title": "Execute o cliente",
+        "detail": "Salve como cliente.py e rode em outro terminal com o mesmo ambiente virtual. O timeout representa o prazo máximo esperado pela chamada, não uma garantia de cancelamento de todos os efeitos remotos.",
+        "language": "python",
+        "code": "import grpc\nimport saldo_pb2 as pb\nimport saldo_pb2_grpc as rpc\n\nwith grpc.insecure_channel('127.0.0.1:50051') as channel:\n    stub = rpc.CarteiraStub(channel)\n    resposta = stub.Consultar(pb.Consulta(conta_id='conta-1'), timeout=2)\n    print(resposta.centavos)"
+      }
+    ]
+  },
+  {
+    "id": "websocket",
+    "name": "WebSocket",
+    "category": "foundation",
+    "kind": "Fundamento",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "tempo real",
+      "conexões",
+      "bidirecional"
+    ],
+    "summary": "Mantenha comunicação bidirecional sobre uma conexão persistente e planeje explicitamente reconexão, limites e estado.",
+    "overview": "WebSocket permite que cliente e servidor troquem mensagens ao longo de uma conexão persistente. É útil quando ambos precisam iniciar mensagens, como colaboração, jogos e acompanhamento interativo. O protocolo não fornece sozinho autorização por mensagem, persistência, confirmação de negócio ou recuperação de histórico. A aplicação deve definir tipos, tamanhos, identidade e política de reconexão. O exemplo com websockets implementa um servidor de eco em localhost: cada texto recebido é devolvido. Isso prova conectividade e ciclo de mensagens, mas não simula um chat distribuído nem promete entrega durável quando um processo cai.",
+    "when": [
+      "Experiências em que cliente e servidor enviam mensagens frequentes sem esperar uma nova requisição HTTP para cada direção.",
+      "Sessões interativas com requisitos de latência definidos e uma equipe capaz de operar grande quantidade de conexões abertas."
+    ],
+    "benefits": [
+      "A conexão persistente permite atualizações em ambas as direções sem polling contínuo por parte do consumidor.",
+      "Um contrato de mensagens pode expressar eventos de interação de maneira independente das rotas HTTP de consulta."
+    ],
+    "tradeoffs": [
+      "Cada conexão consome recursos e precisa sobreviver a timeouts de proxy, dispositivos móveis e mudanças de rede.",
+      "Distribuir mensagens entre várias instâncias exige roteamento ou infraestrutura compartilhada; uma lista local de sockets não atende todo o cluster."
+    ],
+    "avoid": [
+      "Evite aceitar mensagens ilimitadas ou interpretar conexão aberta como prova de que a pessoa ainda possui autorização para cada recurso."
+    ],
+    "steps": [
+      {
+        "title": "Desenhe o protocolo da aplicação",
+        "detail": "Defina envelopes com tipo, identificador e payload, além de limites e códigos de erro. Decida quais mensagens podem ser descartadas e quais precisam de confirmação persistida."
+      },
+      {
+        "title": "Implemente o ciclo de conexão",
+        "detail": "Autentique a abertura, valide origem quando pertinente e revalide permissões das mensagens. Configure ping, fechamento e liberação de recursos para clientes que desaparecem sem encerrar corretamente."
+      },
+      {
+        "title": "Controle pressão e reconexão",
+        "detail": "Limite filas por conexão e estabeleça uma política para clientes lentos. Na reconexão, identifique a sessão e recupere dados perdidos por um contrato explícito, sem presumir continuidade."
+      },
+      {
+        "title": "Teste através da infraestrutura",
+        "detail": "Execute pelo proxy e balanceador reais, simulando conexão ociosa e interrupções. Monitore conexões ativas, duração, fechamento, filas e volume de mensagens, não apenas requisições por segundo."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import asyncio\nfrom websockets.asyncio.server import serve\n\nasync def eco(websocket):\n    async for mensagem in websocket:\n        await websocket.send(mensagem)\n\nasync def main():\n    async with serve(eco, '127.0.0.1', 8765, max_size=65536):\n        await asyncio.Future()\n\nasyncio.run(main())",
+      "explanation": "Salve em servidor.py. O servidor aceita mensagens de até 64 KiB e devolve o conteúdo recebido. Não há autenticação, armazenamento ou TLS; o endereço local mantém o exercício restrito ao próprio computador."
+    },
+    "sources": [
+      {
+        "label": "websockets — tutorial oficial",
+        "url": "https://websockets.readthedocs.io/en/stable/intro/tutorial1.html"
+      },
+      {
+        "label": "RFC 6455 — WebSocket",
+        "url": "https://www.rfc-editor.org/rfc/rfc6455.html"
+      }
+    ],
+    "related": [
+      "sse",
+      "actor-model",
+      "load-balancing"
+    ],
+    "prerequisites": [
+      "Python 3.11 ou superior e familiaridade com async, await e processos que ficam aguardando conexões.",
+      "Distinguir conexão de transporte de sessão de negócio, especialmente em reconexões e troca de instância."
+    ],
+    "validation": [
+      "Envie duas mensagens na mesma conexão e confirme que ambas retornam sem abrir uma conexão por mensagem.",
+      "Interrompa o servidor e observe o cliente; depois teste payload acima do limite e uma conexão que permanece ociosa."
+    ],
+    "failureModes": [
+      "Clientes lentos podem acumular mensagens em memória e prejudicar todos os usuários quando não há limites de fila.",
+      "Reconexões simultâneas após uma queda podem criar uma onda de autenticação e recuperação de estado maior que a carga normal."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Cliente conectado",
+          "technology": "client",
+          "role": "Interação",
+          "detail": "Envia e recebe mensagens na mesma conexão."
+        },
+        {
+          "id": "server",
+          "label": "Servidor WebSocket",
+          "technology": "python",
+          "role": "Conexões",
+          "detail": "Valida mensagens e limita recursos."
+        },
+        {
+          "id": "logic",
+          "label": "Sessão de aplicação",
+          "technology": "service",
+          "role": "Estado",
+          "detail": "Define significado e confirmações de negócio."
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "server",
+          "label": "mensagem cliente"
+        },
+        {
+          "from": "server",
+          "to": "logic",
+          "label": "comando validado"
+        },
+        {
+          "from": "logic",
+          "to": "server",
+          "label": "resultado"
+        },
+        {
+          "from": "server",
+          "to": "client",
+          "label": "mensagem servidor"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Instale a biblioteca",
+        "detail": "No ambiente virtual, instale a implementação que fornece websockets.asyncio. Não crie um arquivo chamado websockets.py, pois ele pode sombrear a biblioteca.",
+        "language": "shell",
+        "code": "python -m pip install 'websockets>=15,<18'"
+      },
+      {
+        "title": "Inicie o servidor de eco",
+        "detail": "Copie o exemplo principal para servidor.py e mantenha o processo aberto. Ele não imprime uma página porque oferece WebSocket, não uma rota HTML.",
+        "language": "shell",
+        "code": "python servidor.py"
+      },
+      {
+        "title": "Troque duas mensagens",
+        "detail": "Salve este cliente como cliente.py e execute em outro terminal. As duas respostas demonstram o uso continuado de uma conexão, sem afirmar persistência após seu fechamento.",
+        "language": "python",
+        "code": "import asyncio\nfrom websockets.asyncio.client import connect\n\nasync def main():\n    async with connect('ws://127.0.0.1:8765') as ws:\n        for texto in ['primeira', 'segunda']:\n            await ws.send(texto)\n            print(await ws.recv())\n\nasyncio.run(main())"
+      }
+    ]
+  },
+  {
+    "id": "sse",
+    "name": "Server-Sent Events — SSE",
+    "category": "foundation",
+    "kind": "Fundamento",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "HTTP",
+      "streaming",
+      "notificações"
+    ],
+    "summary": "Envie atualizações do servidor para o navegador por um fluxo HTTP simples, com reconexão e retomada planejadas.",
+    "overview": "SSE mantém uma resposta HTTP aberta no formato text/event-stream. O servidor publica eventos textuais e o navegador pode consumi-los com EventSource. A comunicação é unidirecional nesse canal; comandos do cliente podem continuar usando requisições HTTP comuns. Eventos possuem campos como data, event e id, separados por uma linha vazia. EventSource tenta reconectar quando a conexão termina, mas recuperar eventos perdidos depende de histórico e lógica do servidor. O exercício produz três mensagens e encerra o fluxo. Ele demonstra enquadramento e entrega incremental, sem implementar armazenamento durável ou retomada por Last-Event-ID.",
+    "when": [
+      "Painéis de progresso, atualizações de status e notificações em que o servidor envia novidades e o cliente envia poucos comandos.",
+      "Aplicações web que desejam usar o ecossistema HTTP sem precisar de comunicação bidirecional contínua no mesmo canal."
+    ],
+    "benefits": [
+      "O formato é legível e pode ser investigado com ferramentas HTTP que não acumulam a resposta inteira.",
+      "EventSource oferece tratamento de eventos e reconexão no navegador, reduzindo parte do código de transporte do cliente."
+    ],
+    "tradeoffs": [
+      "Proxies e middlewares podem acumular dados e transformar um fluxo em uma resposta entregue apenas no final.",
+      "Conexões longas ocupam recursos; limites de conexões por origem e comportamento variam com protocolo e infraestrutura."
+    ],
+    "avoid": [
+      "Evite confundir reconexão automática com entrega garantida ou usar um contador local de processo como histórico durável de eventos."
+    ],
+    "steps": [
+      {
+        "title": "Defina o evento e sua identidade",
+        "detail": "Escolha um payload pequeno, tipo e identificador estável. Determine por quanto tempo o consumidor pode ficar desconectado e o que acontece quando o histórico necessário já expirou."
+      },
+      {
+        "title": "Produza uma resposta incremental",
+        "detail": "Configure text/event-stream, gere mensagens completas com linha vazia e evite middleware que faça buffering. Prepare cabeçalhos e autenticação antes de começar a transmitir o corpo."
+      },
+      {
+        "title": "Planeje cliente e cancelamento",
+        "detail": "Feche o EventSource quando a tela não precisar mais do fluxo. Interrompa produção ao detectar desconexão e implemente retomada quando o caso exigir continuidade verificável."
+      },
+      {
+        "title": "Valide o caminho completo",
+        "detail": "Teste através do proxy utilizado na implantação e observe o intervalo entre eventos. Ajuste buffering e timeouts com base nesse teste, incluindo conexões ociosas e reinício do processo."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import json, time\nfrom flask import Flask, Response\napp = Flask(__name__)\n\n@app.get('/eventos')\ndef eventos():\n    def gerar():\n        for etapa in range(1, 4):\n            yield f'id: {etapa}\\ndata: {json.dumps({\"etapa\": etapa})}\\n\\n'\n            time.sleep(1)\n    return Response(gerar(), mimetype='text/event-stream',\n        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})",
+      "explanation": "Salve em app.py. As três mensagens chegam em intervalos aproximados de um segundo. X-Accel-Buffering é uma orientação específica para NGINX quando respeitada pela configuração; não controla todos os intermediários existentes."
+    },
+    "sources": [
+      {
+        "label": "MDN — uso de SSE",
+        "url": "https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events"
+      },
+      {
+        "label": "Flask — streaming",
+        "url": "https://flask.palletsprojects.com/en/stable/patterns/streaming/"
+      }
+    ],
+    "related": [
+      "websocket",
+      "rest",
+      "load-balancing"
+    ],
+    "prerequisites": [
+      "Conhecer respostas HTTP e geradores Python, além de executar Flask em ambiente virtual para o laboratório.",
+      "Entender que autenticação e política de origem continuam necessárias; o formato de streaming não altera permissões de acesso."
+    ],
+    "validation": [
+      "Use curl sem buffering e confirme que os eventos aparecem progressivamente, não todos juntos após três segundos.",
+      "Com EventSource, observe a reconexão após encerramento e feche explicitamente o cliente ao receber o evento final do laboratório."
+    ],
+    "failureModes": [
+      "Reiniciar a sequência a cada reconexão pode fazer o cliente reaplicar eventos e mostrar progresso incorreto.",
+      "Um gerador que ignora desconexões pode manter recursos e trabalho ativo mesmo depois que a pessoa fecha a página."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "client",
+          "label": "EventSource",
+          "technology": "client",
+          "role": "Consumo",
+          "detail": "Lê eventos e gerencia a conexão."
+        },
+        {
+          "id": "http",
+          "label": "Endpoint de eventos",
+          "technology": "python",
+          "role": "Streaming",
+          "detail": "Enquadra mensagens text/event-stream."
+        },
+        {
+          "id": "job",
+          "label": "Operação acompanhada",
+          "technology": "service",
+          "role": "Origem",
+          "detail": "Produz mudanças de estado que serão publicadas."
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "http",
+          "label": "GET /eventos"
+        },
+        {
+          "from": "job",
+          "to": "http",
+          "label": "atualização"
+        },
+        {
+          "from": "http",
+          "to": "client",
+          "label": "id e data incrementais"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Prepare o servidor",
+        "detail": "Instale Flask e copie o exemplo principal para app.py em uma pasta de laboratório. Use o mesmo ambiente virtual em todas as etapas.",
+        "language": "shell",
+        "code": "python -m pip install 'Flask>=3.1,<4'"
+      },
+      {
+        "title": "Inicie a aplicação",
+        "detail": "Execute o servidor local. O uso de sleep mantém o exemplo simples; servidores reais precisam de capacidade adequada para conexões longas.",
+        "language": "shell",
+        "code": "python -m flask --app app run --port 5000"
+      },
+      {
+        "title": "Observe a entrega incremental",
+        "detail": "Em outro terminal, a opção -N desativa buffering do curl. Confira as linhas vazias entre eventos e repita o teste atrás do proxy antes de adotar a configuração.",
+        "language": "shell",
+        "code": "curl -N -i http://127.0.0.1:5000/eventos"
+      }
+    ]
+  },
+  {
+    "id": "bounded-context",
+    "name": "DDD — Bounded Context",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "DDD",
+      "modelagem",
+      "fronteiras"
+    ],
+    "summary": "Defina onde um modelo e sua linguagem têm significado consistente e torne explícitas as relações entre contextos.",
+    "overview": "Um bounded context estabelece uma fronteira para um modelo de domínio. Dentro dela, termos, regras e responsabilidades precisam ter interpretação coerente. A palavra cliente pode significar uma pessoa de contato em vendas e uma entidade de cobrança no financeiro; tentar impor uma classe universal costuma gerar campos opcionais e conflitos de significado. Contextos não precisam corresponder imediatamente a microserviços ou bancos separados. Podem começar como módulos no mesmo processo, desde que dependências e propriedade dos dados sejam controladas. A decisão principal é semântica e organizacional; a topologia de implantação vem depois, com base em necessidade e custo.",
+    "when": [
+      "Áreas do negócio usam os mesmos nomes para conceitos diferentes ou divergem sobre quem pode alterar determinada informação.",
+      "Um modelo central cresce com exceções de várias equipes e cada mudança exige coordenação ampla para preservar comportamentos distintos."
+    ],
+    "benefits": [
+      "Modelos menores permitem expressar regras locais com clareza sem acomodar todas as interpretações da organização.",
+      "Contratos entre contextos tornam propriedade, tradução e expectativas de integração discutíveis e testáveis."
+    ],
+    "tradeoffs": [
+      "Informações podem aparecer em mais de um contexto com representações e tempos de atualização diferentes.",
+      "Fronteiras incorretas criam comunicação excessiva; a divisão precisa ser revisada com evidências de mudança e operação."
+    ],
+    "avoid": [
+      "Evite definir contextos apenas pelo organograma, por entidades de banco ou por uma meta arbitrária de quantidade de serviços."
+    ],
+    "steps": [
+      {
+        "title": "Colete linguagem e decisões",
+        "detail": "Entreviste quem executa os processos e registre exemplos concretos. Procure termos ambíguos, regras contraditórias e decisões que exigem pessoas com conhecimentos diferentes."
+      },
+      {
+        "title": "Desenhe fronteiras candidatas",
+        "detail": "Agrupe regras que mudam juntas e identifique o responsável por cada informação. Descreva o que fica fora do contexto, incluindo operações que exigem integração com outro modelo."
+      },
+      {
+        "title": "Mapeie relações e traduções",
+        "detail": "Defina consumidor, fornecedor e contrato de troca. Traduza conceitos externos na fronteira em vez de importar classes internas de outro contexto e espalhá-las pelo domínio."
+      },
+      {
+        "title": "Implemente e revise um fluxo",
+        "detail": "Comece por uma integração pequena com contratos explícitos. Meça acoplamento entre mudanças, atrasos de atualização e dificuldades de coordenação antes de decidir separar processos ou bancos."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass ClienteVendas:\n    contato_id: str\n    nome_exibicao: str\n\n@dataclass(frozen=True)\nclass Pagador:\n    cadastro_fiscal_id: str\n    moeda: str\n\nvendas = ClienteVendas('contato-7', 'Loja Central')\nfinanceiro = Pagador('fiscal-9', 'BRL')\nprint(vendas, financeiro)",
+      "explanation": "As duas representações não são convertidas automaticamente: relacionar contato e cadastro fiscal exige uma regra ou cadastro de vínculo explícito. O exemplo demonstra que compartilhar um nome de negócio não obriga compartilhar uma classe."
+    },
+    "sources": [
+      {
+        "label": "Fowler — Bounded Context",
+        "url": "https://martinfowler.com/bliki/BoundedContext.html"
+      },
+      {
+        "label": "Microsoft — análise de domínio para microserviços",
+        "url": "https://learn.microsoft.com/en-us/azure/architecture/microservices/model/domain-analysis"
+      }
+    ],
+    "related": [
+      "aggregates",
+      "ports-contracts",
+      "soa"
+    ],
+    "prerequisites": [
+      "Acesso a pessoas que conhecem os processos, exemplos reais e histórico de mudanças que revele onde os conflitos aparecem.",
+      "Conhecer a diferença entre modelo conceitual, módulo de código, serviço implantado e esquema de armazenamento."
+    ],
+    "validation": [
+      "Peça a especialistas de cada contexto que expliquem os mesmos exemplos e confira se o modelo local resolve ambiguidades relevantes.",
+      "Altere um conceito interno e verifique se o contrato externo permanece estável; documente traduções que precisam mudar."
+    ],
+    "failureModes": [
+      "Uma biblioteca compartilhada de entidades pode reconstruir um modelo universal e exigir publicação coordenada de todos os consumidores.",
+      "Integrar por leitura direta das tabelas do vizinho transforma detalhes internos em contratos involuntários e dificulta evolução."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "sales",
+          "label": "Contexto de vendas",
+          "technology": "service",
+          "role": "Modelo local",
+          "detail": "Mantém contato e negociação."
+        },
+        {
+          "id": "adapter",
+          "label": "Tradução de contrato",
+          "technology": "python",
+          "role": "Fronteira",
+          "detail": "Relaciona significados sem compartilhar entidades internas."
+        },
+        {
+          "id": "billing",
+          "label": "Contexto financeiro",
+          "technology": "service",
+          "role": "Modelo local",
+          "detail": "Mantém pagador e obrigações de cobrança."
+        },
+        {
+          "id": "contract",
+          "label": "Contrato de integração",
+          "technology": "service",
+          "role": "Acordo",
+          "detail": "Define identidade, campos e atualização entre contextos."
+        }
+      ],
+      "edges": [
+        {
+          "from": "sales",
+          "to": "adapter",
+          "label": "dados publicados"
+        },
+        {
+          "from": "contract",
+          "to": "adapter",
+          "label": "regras de interpretação"
+        },
+        {
+          "from": "adapter",
+          "to": "billing",
+          "label": "mensagem traduzida"
+        }
+      ]
+    }
+  },
+  {
+    "id": "aggregates",
+    "name": "DDD — Aggregates",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Avançado",
+    "tags": [
+      "DDD",
+      "invariantes",
+      "concorrência"
+    ],
+    "summary": "Agrupe entidades e valores que precisam preservar invariantes juntos e controle alterações por uma raiz de agregado.",
+    "overview": "Um agregado define uma fronteira de consistência no modelo. Sua raiz expõe operações que mantêm invariantes entre os elementos internos, como impedir alteração de um pedido já fechado. Não significa carregar todo o grafo de objetos relacionado nem transformar cada tabela em agregado. Referências a outros agregados normalmente podem usar identidade, evitando que uma operação modifique indiscriminadamente vários conjuntos. A fronteira precisa considerar concorrência e transações do armazenamento escolhido. Métodos corretos em memória não evitam, sozinhos, que dois processos leiam a mesma versão e gravem resultados conflitantes. O exemplo concentra regras de um pedido na raiz e mantém os itens fora da interface pública de alteração.",
+    "when": [
+      "Operações possuem regras que envolvem mais de um campo ou entidade e precisam terminar em um estado de negócio válido.",
+      "Vários caminhos de entrada alteram os mesmos dados e a equipe precisa de um ponto consistente para proteger invariantes."
+    ],
+    "benefits": [
+      "Operações com nomes de negócio tornam explícito o que é permitido em cada estado do agregado.",
+      "Uma fronteira menor facilita decidir o que deve ser validado e persistido na mesma transação local."
+    ],
+    "tradeoffs": [
+      "Agregados grandes aumentam contenção, volume carregado e probabilidade de conflitos entre operações independentes.",
+      "Agregados pequenos demais podem deslocar invariantes essenciais para coordenações externas difíceis de garantir."
+    ],
+    "avoid": [
+      "Evite disponibilizar listas mutáveis internas ou setters irrestritos que permitam contornar as operações da raiz."
+    ],
+    "steps": [
+      {
+        "title": "Escreva as invariantes",
+        "detail": "Use frases verificáveis, como pedido fechado não recebe novos itens. Diferencie regras locais que exigem consistência imediata de políticas que toleram atualização posterior."
+      },
+      {
+        "title": "Escolha a raiz e as operações",
+        "detail": "Defina uma identidade e métodos que expressem intenção. Exponha consultas seguras e impeça que código externo altere diretamente coleções ou objetos internos."
+      },
+      {
+        "title": "Mapeie a persistência concorrente",
+        "detail": "Salve alterações relacionadas em uma transação e escolha controle otimista por versão ou bloqueios conforme o caso. Decida como o consumidor recebe e resolve conflitos."
+      },
+      {
+        "title": "Teste sequências e disputa",
+        "detail": "Exercite operações válidas e inválidas em diferentes ordens. Depois reproduza duas gravações concorrentes no banco real, porque testes apenas em memória não revelam perdas de atualização."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "class Pedido:\n    def __init__(self):\n        self._itens = []\n        self._fechado = False\n\n    def adicionar(self, produto, quantidade):\n        if self._fechado or type(quantidade) is not int or quantidade <= 0:\n            raise ValueError('Operação inválida')\n        self._itens.append((produto, quantidade))\n\n    def fechar(self):\n        if not self._itens:\n            raise ValueError('Pedido vazio')\n        self._fechado = True\n\npedido = Pedido()\npedido.adicionar('livro', 2)\npedido.fechar()",
+      "explanation": "O exemplo protege duas regras por métodos e mantém estado interno por convenção de nomes. Python não impede acesso externo a esses atributos; a equipe deve preservar essa fronteira e combinar o modelo com transação e concorrência no repositório."
+    },
+    "sources": [
+      {
+        "label": "Microsoft — validações no modelo de domínio",
+        "url": "https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/domain-model-layer-validations"
+      },
+      {
+        "label": "PostgreSQL — isolamento de transações",
+        "url": "https://www.postgresql.org/docs/current/transaction-iso.html"
+      }
+    ],
+    "related": [
+      "bounded-context",
+      "repository",
+      "unit-of-work"
+    ],
+    "prerequisites": [
+      "Conhecer entidades, identidade, objetos de valor e transações, sem assumir que essas ideias exigem um ORM específico.",
+      "Ter exemplos de disputas e estados inválidos do domínio para escolher fronteiras com base em comportamento real."
+    ],
+    "validation": [
+      "Tente fechar um pedido vazio e adicionar item após fechar; confirme que ambos são rejeitados antes de persistir alterações.",
+      "No banco, faça duas sessões carregarem a mesma versão e confirme que a segunda gravação conflitante é detectada ou serializada."
+    ],
+    "failureModes": [
+      "Validação apenas no endpoint deixa tarefas internas e consumidores de mensagens capazes de persistir estados proibidos.",
+      "Uma raiz que carrega todos os históricos e dependências pode tornar uma operação simples lenta e altamente disputada."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "application",
+          "label": "Caso de uso",
+          "technology": "python",
+          "role": "Coordenação",
+          "detail": "Solicita uma mudança com intenção de negócio."
+        },
+        {
+          "id": "root",
+          "label": "Raiz Pedido",
+          "technology": "service",
+          "role": "Invariantes",
+          "detail": "Valida operações e controla itens internos."
+        },
+        {
+          "id": "repository",
+          "label": "Repositório",
+          "technology": "python",
+          "role": "Persistência",
+          "detail": "Carrega e salva a versão do agregado."
+        },
+        {
+          "id": "db",
+          "label": "Banco transacional",
+          "technology": "postgresql",
+          "role": "Concorrência",
+          "detail": "Aplica restrições e coordena gravações."
+        }
+      ],
+      "edges": [
+        {
+          "from": "application",
+          "to": "repository",
+          "label": "carregar"
+        },
+        {
+          "from": "repository",
+          "to": "root",
+          "label": "reconstituir"
+        },
+        {
+          "from": "application",
+          "to": "root",
+          "label": "adicionar ou fechar"
+        },
+        {
+          "from": "repository",
+          "to": "db",
+          "label": "gravar versão consistente"
+        }
+      ]
+    }
+  },
+  {
+    "id": "repository",
+    "name": "Repository",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "persistência",
+      "domínio",
+      "testabilidade"
+    ],
+    "summary": "Ofereça ao domínio uma interface de acesso a objetos que esconda consultas e detalhes de mapeamento desnecessários.",
+    "overview": "Repository concentra a obtenção e persistência de objetos relevantes ao domínio por uma interface semelhante a uma coleção. O consumidor pede um pedido por identidade ou adiciona um agregado, em vez de conhecer SQL e estrutura de tabelas. O padrão não obriga uma interface genérica para todas as entidades, nem torna qualquer banco substituível sem custo. Consultas, transações e concorrência continuam importantes. Um repositório deve representar necessidades concretas do caso de uso e manter visível a responsabilidade por commit. O exemplo usa SQLite por ser simples de executar localmente, mas não afirma equivalência operacional com PostgreSQL.",
+    "when": [
+      "Casos de uso repetem consultas ou mapeamentos e precisam evoluir sem carregar detalhes do driver de banco.",
+      "Um domínio com agregados precisa de uma fronteira explícita para carregar e salvar objetos consistentes."
+    ],
+    "benefits": [
+      "A interface pode ser exercitada com implementação em memória, enquanto testes de integração verificam a implementação SQL.",
+      "Consultas repetidas ficam centralizadas, facilitando revisar paginação, parâmetros, índices e política de acesso."
+    ],
+    "tradeoffs": [
+      "Abstrações genéricas podem esconder consultas caras e impedir o uso eficiente de capacidades específicas do banco.",
+      "Um repositório sobre um ORM que já fornece a mesma abstração pode apenas duplicar métodos sem reduzir acoplamento."
+    ],
+    "avoid": [
+      "Evite métodos que retornam um construtor de consultas específico do ORM se o objetivo declarado é esconder essa dependência do domínio."
+    ],
+    "steps": [
+      {
+        "title": "Derive a interface dos casos",
+        "detail": "Liste consultas e gravações realmente necessárias, incluindo comportamento de ausência. Prefira obter_pedido a um conjunto ilimitado de métodos genéricos que ninguém consegue definir semanticamente."
+      },
+      {
+        "title": "Implemente mapeamento e parâmetros",
+        "detail": "Converta registros em dados de domínio e use parâmetros do driver. Estabeleça limites para listas e evite interpolar entradas do usuário diretamente em SQL."
+      },
+      {
+        "title": "Separe acesso de transação",
+        "detail": "Receba conexão ou sessão de uma unidade de trabalho. Não faça commit escondido em cada método quando várias alterações precisam ser confirmadas juntas pelo caso de uso."
+      },
+      {
+        "title": "Teste o contrato e o banco",
+        "detail": "Execute os mesmos cenários de resultado e ausência para implementações alternativas. Adicione testes no banco real para restrições, isolamento, tipos e desempenho que uma implementação falsa não reproduz."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "class Pedidos:\n    def __init__(self, conexao):\n        self.conexao = conexao\n\n    def obter(self, pedido_id):\n        linha = self.conexao.execute(\n            'SELECT id, total_centavos FROM pedidos WHERE id = ?',\n            (pedido_id,)).fetchone()\n        return None if linha is None else {'id': linha[0], 'total_centavos': linha[1]}",
+      "explanation": "Salve como repo.py. O método usa placeholders do SQLite e diferencia ausência de resultado válido. Ele recebe a conexão e não decide commit, permitindo que o chamador coordene uma transação maior."
+    },
+    "sources": [
+      {
+        "label": "Fowler — Repository",
+        "url": "https://martinfowler.com/eaaCatalog/repository.html"
+      },
+      {
+        "label": "Python — sqlite3 e placeholders",
+        "url": "https://docs.python.org/3/library/sqlite3.html"
+      }
+    ],
+    "related": [
+      "aggregates",
+      "unit-of-work",
+      "dependency-injection"
+    ],
+    "prerequisites": [
+      "Python com sqlite3 disponível, conhecimentos de SQL parametrizado e noção de identidade de objetos de domínio.",
+      "Entender que trocar o banco pode exigir migrações, revisão de consultas e novos testes de concorrência."
+    ],
+    "validation": [
+      "Consulte um pedido existente e outro ausente; confira o contrato None e a representação retornada, sem depender de detalhes da tupla SQL.",
+      "No banco escolhido para produção, analise o plano da consulta e confirme que a identidade possui índice e restrição apropriados."
+    ],
+    "failureModes": [
+      "A implementação falsa pode aceitar estados que o banco rejeita, criando confiança indevida se não houver testes de integração.",
+      "Um commit interno em adicionar pode confirmar metade de um caso de uso e impedir rollback das demais alterações."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "usecase",
+          "label": "Caso de uso",
+          "technology": "python",
+          "role": "Consumidor",
+          "detail": "Solicita pedidos por uma interface pequena."
+        },
+        {
+          "id": "repo",
+          "label": "Repository",
+          "technology": "service",
+          "role": "Mapeamento",
+          "detail": "Concentra consulta e conversão."
+        },
+        {
+          "id": "db",
+          "label": "SQLite no laboratório",
+          "technology": "database",
+          "role": "Persistência",
+          "detail": "Executa SQL parametrizado."
+        }
+      ],
+      "edges": [
+        {
+          "from": "usecase",
+          "to": "repo",
+          "label": "obter(id)"
+        },
+        {
+          "from": "repo",
+          "to": "db",
+          "label": "SELECT com parâmetro"
+        },
+        {
+          "from": "repo",
+          "to": "usecase",
+          "label": "pedido ou ausência"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Confirme o módulo padrão",
+        "detail": "O laboratório não instala um pacote chamado sqlite3. Verifique se sua distribuição Python oferece o módulo e salve o exemplo principal como repo.py.",
+        "language": "shell",
+        "code": "python -c \"import sqlite3; print(sqlite3.sqlite_version)\""
+      },
+      {
+        "title": "Monte uma integração pequena",
+        "detail": "Salve como demo.py ao lado de repo.py. O banco em memória fica restrito a esta conexão e demonstra resultados reais do SQL sem criar um arquivo persistente.",
+        "language": "python",
+        "code": "import sqlite3\nfrom repo import Pedidos\n\nwith sqlite3.connect(':memory:') as db:\n    db.execute('CREATE TABLE pedidos (id INTEGER PRIMARY KEY, total_centavos INTEGER NOT NULL)')\n    db.execute('INSERT INTO pedidos VALUES (?, ?)', (1, 12500))\n    repo = Pedidos(db)\n    assert repo.obter(1)['total_centavos'] == 12500\n    assert repo.obter(999) is None\n    print(repo.obter(1))\ndb.close()"
+      },
+      {
+        "title": "Execute o contrato observado",
+        "detail": "Rode a demonstração e altere o identificador consultado. Uma refatoração do SQL deve preservar resultado, ausência e responsabilidade pela transação; esses são os comportamentos que o consumidor utiliza.",
+        "language": "shell",
+        "code": "python demo.py"
+      }
+    ]
+  },
+  {
+    "id": "unit-of-work",
+    "name": "Unit of Work",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "transação",
+      "consistência",
+      "persistência"
+    ],
+    "summary": "Coordene alterações relacionadas em uma unidade de trabalho e torne explícito quando confirmar ou desfazer a operação.",
+    "overview": "Unit of Work acompanha mudanças realizadas durante uma operação de negócio e coordena sua gravação. ORMs frequentemente oferecem esse comportamento através de uma sessão ou contexto; uma aplicação também pode definir uma fronteira própria para controlar transações. O objetivo é evitar que cada repositório confirme alterações isoladamente. A unidade de trabalho não cria uma transação distribuída entre banco, e-mail e serviços remotos. O laboratório demonstra uma implementação mínima da fronteira transacional usando o gerenciador de contexto de uma conexão SQLite; ele não implementa rastreamento de objetos como um ORM completo.",
+    "when": [
+      "Um caso de uso altera mais de um registro e precisa confirmar todos ou preservar o estado anterior.",
+      "Vários repositórios participam da mesma operação e precisam compartilhar conexão, transação e política de rollback."
+    ],
+    "benefits": [
+      "O ponto de commit fica visível no fluxo do caso de uso, facilitando raciocinar sobre sucesso e falha.",
+      "Uma exceção antes da confirmação pode desfazer alterações locais relacionadas em vez de deixar uma atualização parcial."
+    ],
+    "tradeoffs": [
+      "Transações longas mantêm recursos e bloqueios, aumentando contenção e risco de timeout sob concorrência.",
+      "Um rollback local não desfaz uma chamada remota já concluída; efeitos externos precisam de uma estratégia própria."
+    ],
+    "avoid": [
+      "Evite manter uma transação aberta enquanto espera interação humana ou uma chamada de rede lenta sem necessidade explícita."
+    ],
+    "steps": [
+      {
+        "title": "Delimite a operação atômica",
+        "detail": "Liste as mudanças que devem permanecer juntas e identifique quais pertencem ao mesmo banco. Separe efeitos externos para não atribuir ao commit garantias que ele não oferece."
+      },
+      {
+        "title": "Compartilhe o contexto",
+        "detail": "Crie uma sessão ou conexão por unidade de trabalho e entregue a mesma instância aos repositórios envolvidos. Defina quem inicia, confirma, desfaz e fecha os recursos."
+      },
+      {
+        "title": "Proteja o caminho de falha",
+        "detail": "Deixe exceções interromperem a operação e faça rollback antes de devolver a falha ao chamador. Não capture todo erro para continuar como se a transação tivesse sido concluída."
+      },
+      {
+        "title": "Teste atomicidade e concorrência",
+        "detail": "Introduza uma falha entre duas gravações e confira o estado persistido. Depois examine isolamento e disputas no banco real, pois atomicidade não impede todas as anomalias de concorrência."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import sqlite3\n\ndb = sqlite3.connect(':memory:')\ndb.execute('CREATE TABLE contas (id INTEGER PRIMARY KEY, saldo INTEGER NOT NULL)')\ndb.executemany('INSERT INTO contas VALUES (?, ?)', [(1, 100), (2, 0)])\ndb.commit()\ntry:\n    with db:\n        db.execute('UPDATE contas SET saldo = saldo - 30 WHERE id = 1')\n        raise RuntimeError('Falha antes do crédito')\n        db.execute('UPDATE contas SET saldo = saldo + 30 WHERE id = 2')\nexcept RuntimeError:\n    pass\nassert db.execute('SELECT saldo FROM contas WHERE id = 1').fetchone()[0] == 100\nprint('Rollback confirmado')\ndb.close()",
+      "explanation": "O trecho injeta uma falha de propósito e verifica que o débito não permaneceu. O segundo UPDATE mostra a operação interrompida. Não é um sistema bancário: faltam autorização, validação de saldo e tratamento de concorrência."
+    },
+    "sources": [
+      {
+        "label": "Fowler — Unit of Work",
+        "url": "https://martinfowler.com/eaaCatalog/unitOfWork.html"
+      },
+      {
+        "label": "Python — contexto transacional de conexão",
+        "url": "https://docs.python.org/3/library/sqlite3.html"
+      },
+      {
+        "label": "PostgreSQL — transações",
+        "url": "https://www.postgresql.org/docs/current/tutorial-transactions.html"
+      }
+    ],
+    "related": [
+      "repository",
+      "aggregates",
+      "transaction-script"
+    ],
+    "prerequisites": [
+      "Conhecer commit, rollback e a diferença entre atomicidade e isolamento, além de executar Python com sqlite3.",
+      "Identificar efeitos que acontecem fora do banco e não podem ser revertidos por um rollback local."
+    ],
+    "validation": [
+      "Execute o exemplo com a falha e confira saldo 100; remova apenas a exceção e confira que débito e crédito são confirmados juntos.",
+      "Teste restrição violada na segunda gravação e verifique se a primeira também foi desfeita, usando o mesmo contexto transacional."
+    ],
+    "failureModes": [
+      "Capturar a exceção dentro do bloco transacional sem sinalizar falha pode fazer o gerenciador confirmar um estado parcial.",
+      "Repositórios com conexões independentes podem parecer parte da mesma operação, mas cada conexão confirma mudanças separadamente."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "case",
+          "label": "Operação de aplicação",
+          "technology": "python",
+          "role": "Coordenação",
+          "detail": "Executa mudanças relacionadas."
+        },
+        {
+          "id": "uow",
+          "label": "Unidade de trabalho",
+          "technology": "service",
+          "role": "Transação",
+          "detail": "Coordena confirmação ou rollback."
+        },
+        {
+          "id": "repo",
+          "label": "Repositórios",
+          "technology": "python",
+          "role": "Acesso",
+          "detail": "Compartilham a conexão da operação."
+        },
+        {
+          "id": "db",
+          "label": "Banco local",
+          "technology": "database",
+          "role": "Atomicidade",
+          "detail": "Persiste somente o resultado confirmado."
+        }
+      ],
+      "edges": [
+        {
+          "from": "case",
+          "to": "uow",
+          "label": "iniciar"
+        },
+        {
+          "from": "uow",
+          "to": "repo",
+          "label": "conexão compartilhada"
+        },
+        {
+          "from": "repo",
+          "to": "db",
+          "label": "alterações"
+        },
+        {
+          "from": "uow",
+          "to": "db",
+          "label": "commit ou rollback"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Verifique a dependência local",
+        "detail": "Use um interpretador com sqlite3 disponível. Nenhum servidor de banco separado é necessário para observar a fronteira transacional deste laboratório.",
+        "language": "shell",
+        "code": "python -c \"import sqlite3; print(sqlite3.sqlite_version)\""
+      },
+      {
+        "title": "Execute a falha controlada",
+        "detail": "Salve o exemplo principal como uow.py e execute. O resultado esperado confirma rollback; uma asserção quebrada indica que o comportamento observado difere do contrato descrito.",
+        "language": "shell",
+        "code": "python uow.py"
+      },
+      {
+        "title": "Compare uma operação bem-sucedida",
+        "detail": "Salve este contraste como sucesso.py e execute. A saída contém saldos 70 e 30 porque ambas as gravações concluem dentro do mesmo contexto.",
+        "language": "python",
+        "code": "import sqlite3\nwith sqlite3.connect(':memory:') as db:\n    db.execute('CREATE TABLE contas (id INTEGER PRIMARY KEY, saldo INTEGER)')\n    db.executemany('INSERT INTO contas VALUES (?, ?)', [(1, 100), (2, 0)])\n    db.commit()\n    with db:\n        db.execute('UPDATE contas SET saldo = saldo - 30 WHERE id = 1')\n        db.execute('UPDATE contas SET saldo = saldo + 30 WHERE id = 2')\n    print(db.execute('SELECT id, saldo FROM contas ORDER BY id').fetchall())\ndb.close()"
+      }
+    ]
+  },
+  {
+    "id": "dependency-injection",
+    "name": "Dependency Injection",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Fundamentos",
+    "tags": [
+      "dependências",
+      "testabilidade",
+      "composição"
+    ],
+    "summary": "Entregue as dependências de uma operação de fora para dentro e concentre a montagem dos objetos em um ponto explícito.",
+    "overview": "Injeção de dependência significa receber colaboradores em vez de criá-los ou buscá-los escondidos dentro da classe. Uma operação que envia alertas pode receber um canal; produção fornece a implementação de rede e o teste fornece um objeto que registra chamadas. Um container pode automatizar a montagem, mas não é requisito do padrão. A decisão importante é separar configuração e uso, tornando as dependências visíveis. O exemplo usa Python e Protocol para documentar um contrato estrutural. As anotações ajudam ferramentas de análise; elas não validam automaticamente o conteúdo recebido em tempo de execução.",
+    "when": [
+      "Casos de uso dependem de relógio, persistência, rede ou outro recurso que precisa ser substituído durante testes.",
+      "A configuração varia entre ambientes, mas as regras da aplicação devem permanecer iguais e independentes da construção de clientes."
+    ],
+    "benefits": [
+      "Testes podem controlar respostas e falhas de colaboradores sem modificar a lógica que está sendo avaliada.",
+      "A assinatura do construtor revela necessidades da classe e ajuda a identificar objetos com responsabilidades demais."
+    ],
+    "tradeoffs": [
+      "Muitas interfaces sem variação real podem aumentar navegação e configuração sem produzir isolamento útil.",
+      "Ciclos e tempos de vida incompatíveis continuam possíveis; um container não corrige um desenho de dependências confuso."
+    ],
+    "avoid": [
+      "Evite substituir criação direta por um localizador global de serviços e apresentar essa dependência oculta como se fosse injeção explícita."
+    ],
+    "steps": [
+      {
+        "title": "Identifique uma dependência externa",
+        "detail": "Escolha um colaborador que introduz variabilidade ou efeito, como envio de mensagem. Descreva apenas as operações que o consumidor utiliza, sem copiar toda a API do fornecedor."
+      },
+      {
+        "title": "Receba o contrato no construtor",
+        "detail": "Guarde a dependência recebida e chame seu comportamento no caso de uso. Preserve validação de entrada e regras dentro da operação; o teste não deve ser obrigado a recriá-las."
+      },
+      {
+        "title": "Monte na raiz de composição",
+        "detail": "Em um módulo de inicialização, construa adaptadores, casos de uso e rotas. Defina quem fecha conexões e qual dependência é compartilhada ou criada por requisição."
+      },
+      {
+        "title": "Teste substituição e falha",
+        "detail": "Injete um registrador para conferir chamadas e outro colaborador que lança uma falha esperada. Verifique resultado e propagação sem realizar envios reais ou depender de credenciais."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from typing import Protocol\n\nclass Canal(Protocol):\n    def enviar(self, mensagem: str) -> None: ...\n\nclass Notificar:\n    def __init__(self, canal: Canal):\n        self.canal = canal\n\n    def executar(self, mensagem: str):\n        if not mensagem.strip():\n            raise ValueError('Mensagem vazia')\n        self.canal.enviar(mensagem)\n\nclass Memoria:\n    def __init__(self): self.mensagens = []\n    def enviar(self, mensagem): self.mensagens.append(mensagem)",
+      "explanation": "Salve como notificacao.py. Memoria satisfaz o contrato sem herdar de Canal. Protocol descreve a estrutura para análise estática; validação de tipo ou conteúdo em runtime exige decisões adicionais da aplicação."
+    },
+    "sources": [
+      {
+        "label": "Fowler — Dependency Injection",
+        "url": "https://martinfowler.com/articles/injection.html"
+      },
+      {
+        "label": "Python — typing.Protocol",
+        "url": "https://docs.python.org/3/library/typing.html#typing.Protocol"
+      }
+    ],
+    "related": [
+      "service-layer",
+      "repository",
+      "ports-contracts"
+    ],
+    "prerequisites": [
+      "Conhecer composição de objetos e a diferença entre uma interface documentada e uma implementação concreta.",
+      "Usar Python 3.11 ou superior e importar Protocol de typing, evitando arquivos locais chamados typing.py."
+    ],
+    "validation": [
+      "Injete Memoria, execute uma mensagem e confira exatamente uma chamada com o conteúdo esperado, sem nenhum envio externo.",
+      "Passe uma mensagem vazia e confirme que nenhuma mensagem foi registrada; simule depois uma falha do canal e observe a política definida."
+    ],
+    "failureModes": [
+      "Uma dependência por requisição armazenada em objeto global pode vazar conexão, identidade ou dados entre atendimentos.",
+      "Injetar um objeto com estado mutável compartilhado sem proteção pode tornar resultados dependentes da ordem e da concorrência dos testes."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "composition",
+          "label": "Raiz de composição",
+          "technology": "python",
+          "role": "Montagem",
+          "detail": "Escolhe implementações e tempos de vida."
+        },
+        {
+          "id": "case",
+          "label": "Notificar",
+          "technology": "service",
+          "role": "Caso de uso",
+          "detail": "Depende apenas do contrato Canal."
+        },
+        {
+          "id": "adapter",
+          "label": "Canal concreto",
+          "technology": "python",
+          "role": "Efeito",
+          "detail": "Implementa envio ou registro em memória."
+        }
+      ],
+      "edges": [
+        {
+          "from": "composition",
+          "to": "adapter",
+          "label": "construir"
+        },
+        {
+          "from": "composition",
+          "to": "case",
+          "label": "injetar canal"
+        },
+        {
+          "from": "case",
+          "to": "adapter",
+          "label": "enviar mensagem"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Confirme os imports",
+        "detail": "Verifique o interpretador e o módulo typing antes de instalar qualquer biblioteca. Protocol faz parte da biblioteca padrão em versões modernas de Python.",
+        "language": "shell",
+        "code": "python -c \"import sys, typing; print(sys.executable); print(typing.__file__); from typing import Protocol\""
+      },
+      {
+        "title": "Monte e exercite",
+        "detail": "Salve o exemplo principal em notificacao.py e este trecho em demo.py. A composição acontece fora de Notificar e o teste inspeciona o efeito observável.",
+        "language": "python",
+        "code": "from notificacao import Notificar, Memoria\ncanal = Memoria()\ncaso = Notificar(canal)\ncaso.executar('Pedido confirmado')\nassert canal.mensagens == ['Pedido confirmado']\nprint(canal.mensagens)"
+      },
+      {
+        "title": "Verifique a fronteira de validação",
+        "detail": "Acrescente ao demo.py e execute python demo.py. A falha de entrada deve acontecer antes de chamar o colaborador, mantendo somente a primeira mensagem registrada.",
+        "language": "python",
+        "code": "try:\n    caso.executar('   ')\nexcept ValueError:\n    pass\nelse:\n    raise AssertionError('Esperava rejeição')\nassert len(canal.mensagens) == 1"
+      }
+    ]
+  },
+  {
+    "id": "service-layer",
+    "name": "Service Layer",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "casos de uso",
+      "coordenação",
+      "transações"
+    ],
+    "summary": "Ofereça operações de aplicação que coordenam domínio e infraestrutura sem depender de uma entrada HTTP específica.",
+    "overview": "Uma service layer define operações disponíveis para os consumidores da aplicação. Ela coordena validação de caso de uso, acesso ao domínio, persistência e a resposta ao chamador. O mesmo serviço pode ser utilizado por uma rota, uma linha de comando ou um consumidor de mensagens. Isso não significa colocar toda regra em uma classe chamada Service: invariantes de entidades podem permanecer no domínio, enquanto a camada organiza a sequência. O exemplo cria um pedido em uma coleção injetada para mostrar a fronteira. Persistência durável, autorização e transação são decisões adicionais, explicitadas quando o fluxo deixa o laboratório.",
+    "when": [
+      "Diferentes entradas precisam executar o mesmo caso de uso e não devem duplicar a sequência de validação e persistência.",
+      "Controllers acumulam coordenação de várias dependências e tornam difícil testar uma operação sem iniciar o transporte."
+    ],
+    "benefits": [
+      "Uma operação nomeada pelo negócio fornece um ponto estável para chamar e testar o comportamento da aplicação.",
+      "A fronteira facilita localizar decisões de transação, tratamento de erros esperados e observabilidade de cada caso de uso."
+    ],
+    "tradeoffs": [
+      "Serviços com muitos métodos e dependências podem virar objetos centrais que conhecem todo o sistema.",
+      "Operações triviais podem não justificar classes adicionais; uma função com dependências explícitas pode representar a mesma fronteira."
+    ],
+    "avoid": [
+      "Evite deixar detalhes como request, response ou códigos HTTP atravessarem a camada de aplicação quando ela também atende outros transportes."
+    ],
+    "steps": [
+      {
+        "title": "Escolha um caso de uso",
+        "detail": "Nomeie a operação pela intenção, como criar_pedido. Defina entrada, saída, identidade do solicitante e falhas esperadas em termos do negócio, antes de definir uma rota."
+      },
+      {
+        "title": "Distribua responsabilidades",
+        "detail": "A entrada interpreta o protocolo; o serviço coordena; o domínio protege invariantes; o repositório acessa dados. Ajuste essa divisão ao tamanho real do problema, sem criar classes vazias."
+      },
+      {
+        "title": "Defina a fronteira transacional",
+        "detail": "Agrupe alterações que precisam ser atômicas e evite efeitos remotos no meio de transações longas. Deixe explícito o que foi concluído quando uma dependência falha."
+      },
+      {
+        "title": "Reutilize e observe",
+        "detail": "Chame a mesma operação por dois adaptadores e confira comportamento consistente. Registre duração, resultado e identificadores de correlação sem incluir dados sensíveis desnecessários."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "class CriarPedido:\n    def __init__(self, pedidos):\n        self.pedidos = pedidos\n\n    def executar(self, pedido_id, total_centavos):\n        if type(total_centavos) is not int or total_centavos <= 0:\n            raise ValueError('Total inválido')\n        if pedido_id in self.pedidos:\n            raise ValueError('Pedido já existe')\n        pedido = {'id': pedido_id, 'total_centavos': total_centavos}\n        self.pedidos[pedido_id] = pedido\n        return pedido.copy()",
+      "explanation": "Salve como servico.py. A coleção injetada permite observar a operação sem HTTP. O teste de existência seguido de gravação não é seguro para concorrência em produção; use restrição única e transação no armazenamento real."
+    },
+    "sources": [
+      {
+        "label": "Fowler — Service Layer",
+        "url": "https://martinfowler.com/eaaCatalog/serviceLayer.html"
+      },
+      {
+        "label": "Fowler — objetos de domínio e comportamento",
+        "url": "https://martinfowler.com/bliki/AnemicDomainModel.html"
+      }
+    ],
+    "related": [
+      "mvc",
+      "dependency-injection",
+      "unit-of-work"
+    ],
+    "prerequisites": [
+      "Conhecer funções ou classes, injeção de dependência e contratos de entrada e saída independentes de protocolo.",
+      "Identificar regras que pertencem ao domínio e políticas de aplicação, como autorização e limites de transação."
+    ],
+    "validation": [
+      "Execute a operação diretamente e através de um adaptador, confirmando que ambos rejeitam valores inválidos da mesma maneira.",
+      "Simule persistência indisponível e duplicidade; confira se a resposta diferencia falha de negócio de erro operacional sem afirmar sucesso."
+    ],
+    "failureModes": [
+      "Controllers podem validar regras que o serviço não valida, permitindo que uma tarefa interna contorne restrições importantes.",
+      "O serviço pode confirmar o banco e falhar no envio remoto, deixando a operação parcialmente concluída se essa fronteira não foi planejada."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "http",
+          "label": "Entrada HTTP",
+          "technology": "client",
+          "role": "Adaptador",
+          "detail": "Traduz protocolo para argumentos."
+        },
+        {
+          "id": "cli",
+          "label": "Tarefa ou CLI",
+          "technology": "python",
+          "role": "Adaptador",
+          "detail": "Chama o mesmo caso de uso."
+        },
+        {
+          "id": "service",
+          "label": "Criar pedido",
+          "technology": "service",
+          "role": "Aplicação",
+          "detail": "Coordena validação e persistência."
+        },
+        {
+          "id": "repo",
+          "label": "Persistência",
+          "technology": "database",
+          "role": "Dados",
+          "detail": "Mantém identidade e restrições."
+        }
+      ],
+      "edges": [
+        {
+          "from": "http",
+          "to": "service",
+          "label": "executar"
+        },
+        {
+          "from": "cli",
+          "to": "service",
+          "label": "executar"
+        },
+        {
+          "from": "service",
+          "to": "repo",
+          "label": "gravar pedido"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Salve o caso de uso",
+        "detail": "Copie o exemplo principal para servico.py. Este comando valida a sintaxe do módulo sem iniciar servidor ou instalar dependências externas.",
+        "language": "shell",
+        "code": "python -m py_compile servico.py"
+      },
+      {
+        "title": "Implemente uma entrada simples",
+        "detail": "Salve como demo.py. A função simula uma borda que interpreta dados, enquanto CriarPedido mantém a operação reutilizável e independente desse formato.",
+        "language": "python",
+        "code": "from servico import CriarPedido\npedidos = {}\ncriar = CriarPedido(pedidos)\n\ndef entrada(payload):\n    return criar.executar(payload['id'], payload['total_centavos'])\n\nprint(entrada({'id': 'p-1', 'total_centavos': 12500}))\nassert pedidos['p-1']['total_centavos'] == 12500"
+      },
+      {
+        "title": "Confira a invariância entre entradas",
+        "detail": "Acrescente ao demo.py e rode python demo.py. A chamada direta também é rejeitada, demonstrando que a regra não existe somente na função que interpreta o payload.",
+        "language": "python",
+        "code": "try:\n    criar.executar('p-2', -10)\nexcept ValueError:\n    pass\nelse:\n    raise AssertionError('Total negativo aceito')\nassert 'p-2' not in pedidos"
+      }
+    ]
+  },
+  {
+    "id": "transaction-script",
+    "name": "Transaction Script",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Fundamentos",
+    "tags": [
+      "lógica de negócio",
+      "procedimentos",
+      "simplicidade"
+    ],
+    "summary": "Organize cada operação de negócio como um procedimento claro quando as regras ainda não exigem um modelo de domínio complexo.",
+    "overview": "Transaction Script concentra a lógica de uma operação em uma sequência de passos: interpretar dados, validar condições, consultar, calcular e gravar. É uma alternativa legítima para domínios simples, não um sinônimo de código improvisado. O nome descreve uma organização da lógica; não garante automaticamente uma transação de banco. Uma função bem delimitada pode começar assim e evoluir quando regras compartilhadas se tornam complexas. O exemplo realiza uma baixa condicional de estoque no próprio SQL e verifica se alguma linha foi alterada. Ele evita a sequência vulnerável de ler quantidade, calcular fora do banco e gravar um valor absoluto.",
+    "when": [
+      "Operações administrativas ou fluxos pequenos com poucas regras, pouca variação e uma sequência fácil de compreender.",
+      "Sistemas em estágio inicial, nos quais o custo de um modelo rico ainda não é justificado pelas necessidades observadas."
+    ],
+    "benefits": [
+      "Uma operação pode ser lida do início ao fim sem navegar por muitas classes e abstrações.",
+      "A estrutura torna simples conectar uma validação concreta ao SQL e ao resultado esperado pelo chamador."
+    ],
+    "tradeoffs": [
+      "Conforme as regras crescem, procedimentos diferentes podem duplicar cálculos e divergirem na interpretação do domínio.",
+      "Misturar detalhes HTTP e SQL no mesmo procedimento dificulta reutilizar a operação em outros transportes."
+    ],
+    "avoid": [
+      "Evite usar a simplicidade inicial como justificativa para ignorar transações, restrições do banco e testes de cenários inválidos."
+    ],
+    "steps": [
+      {
+        "title": "Delimite uma operação completa",
+        "detail": "Defina uma intenção de negócio e suas pré-condições. Liste os registros que podem mudar e o resultado que será retornado quando a operação for concluída ou recusada."
+      },
+      {
+        "title": "Escreva a sequência explícita",
+        "detail": "Mantenha validação e alterações próximas, com nomes que expliquem o negócio. Extraia apenas repetições claras e dependências externas; não esconda passos importantes em utilitários genéricos."
+      },
+      {
+        "title": "Garanta a condição na gravação",
+        "detail": "Quando houver disputa, use SQL condicional, restrições ou bloqueios adequados. Uma consulta anterior não garante que o mesmo estado existirá no momento do UPDATE."
+      },
+      {
+        "title": "Observe sinais de evolução",
+        "detail": "Quando cálculos e invariantes se repetirem em várias operações, considere funções de domínio ou agregados. Faça a mudança por dificuldade concreta, preservando o contrato e os testes existentes."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import sqlite3\n\ndef reservar(db, produto_id, quantidade):\n    if type(quantidade) is not int or quantidade <= 0:\n        raise ValueError('Quantidade inválida')\n    with db:\n        cursor = db.execute(\n            'UPDATE estoque SET saldo = saldo - ? WHERE id = ? AND saldo >= ?',\n            (quantidade, produto_id, quantidade))\n        if cursor.rowcount != 1:\n            raise ValueError('Produto ausente ou estoque insuficiente')\n\nwith sqlite3.connect(':memory:') as db:\n    db.execute('CREATE TABLE estoque (id INTEGER PRIMARY KEY, saldo INTEGER NOT NULL CHECK(saldo >= 0))')\n    db.execute('INSERT INTO estoque VALUES (1, 5)')\n    db.commit()\n    reservar(db, 1, 2)\n    print(db.execute('SELECT saldo FROM estoque WHERE id = 1').fetchone()[0])\ndb.close()",
+      "explanation": "O resultado esperado é 3. O procedimento usa atualização condicional e uma restrição adicional no banco. Ele não registra uma reserva identificável nem implementa expiração; esses requisitos exigiriam mais dados e operações."
+    },
+    "sources": [
+      {
+        "label": "Fowler — Transaction Script",
+        "url": "https://martinfowler.com/eaaCatalog/transactionScript.html"
+      },
+      {
+        "label": "SQLite — UPDATE",
+        "url": "https://www.sqlite.org/lang_update.html"
+      },
+      {
+        "label": "Python — sqlite3",
+        "url": "https://docs.python.org/3/library/sqlite3.html"
+      }
+    ],
+    "related": [
+      "service-layer",
+      "unit-of-work",
+      "aggregates"
+    ],
+    "prerequisites": [
+      "Conhecer SQL parametrizado, contagem de linhas alteradas e diferença entre uma operação de aplicação e uma transação técnica.",
+      "Saber executar um exemplo SQLite e reconhecer que regras de concorrência devem ser verificadas no banco usado pelo produto."
+    ],
+    "validation": [
+      "Reserve duas unidades e confira saldo três; tente reservar quatro depois e confirme rejeição sem alteração de saldo.",
+      "Teste quantidade zero, negativa e produto ausente; defina se o contrato público deve distinguir ausência de estoque insuficiente."
+    ],
+    "failureModes": [
+      "Duplicar a mesma regra em várias funções permite que um fluxo aceite algo proibido em outro, especialmente após manutenção parcial.",
+      "Ler o estoque e gravar o saldo calculado sem condição ou controle de concorrência pode perder alterações feitas por outra operação."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "input",
+          "label": "Entrada da operação",
+          "technology": "client",
+          "role": "Solicitação",
+          "detail": "Informa produto e quantidade."
+        },
+        {
+          "id": "script",
+          "label": "Procedimento reservar",
+          "technology": "python",
+          "role": "Lógica",
+          "detail": "Valida e executa uma sequência direta."
+        },
+        {
+          "id": "db",
+          "label": "Estoque",
+          "technology": "database",
+          "role": "Consistência",
+          "detail": "Aplica UPDATE condicional e restrição."
+        }
+      ],
+      "edges": [
+        {
+          "from": "input",
+          "to": "script",
+          "label": "reservar unidades"
+        },
+        {
+          "from": "script",
+          "to": "db",
+          "label": "alterar se houver saldo"
+        },
+        {
+          "from": "db",
+          "to": "script",
+          "label": "quantidade de linhas alteradas"
+        },
+        {
+          "from": "script",
+          "to": "input",
+          "label": "sucesso ou recusa"
+        }
+      ]
+    }
+  },
+  {
+    "id": "vertical-slice",
+    "name": "Vertical Slice Architecture",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "funcionalidades",
+      "organização de código",
+      "acoplamento"
+    ],
+    "summary": "Organize código ao redor de casos de uso completos para que alterações de uma funcionalidade fiquem concentradas.",
+    "overview": "Uma fatia vertical reúne o que uma funcionalidade precisa: entrada, validação, coordenação, acesso a dados e resposta. Em vez de modificar pastas globais de controllers, services e repositories para cada entrega, a equipe encontra o fluxo perto de sua intenção de negócio. Isso não significa duplicar regras essenciais nem proibir abstrações compartilhadas. Regras estáveis podem ser extraídas quando várias fatias demonstram a mesma necessidade. Também não exige CQRS, microserviços ou bancos separados. O exemplo apresenta um handler de criação que recebe uma dependência de gravação; a pasta da funcionalidade poderia conter seu endpoint e testes associados.",
+    "when": [
+      "Mudanças de produto costumam atravessar muitas camadas técnicas, dificultando descobrir quais arquivos pertencem a uma funcionalidade.",
+      "Uma aplicação contém casos de uso com necessidades diferentes de consulta, validação e integração que não se encaixam bem numa abstração uniforme."
+    ],
+    "benefits": [
+      "O fluxo completo fica mais próximo, facilitando revisão, teste e compreensão do impacto de uma mudança.",
+      "Cada fatia pode adotar a complexidade necessária ao caso sem impor o mesmo conjunto de classes a todas as funcionalidades."
+    ],
+    "tradeoffs": [
+      "Alguma duplicação inicial pode ocorrer e exige julgamento para distinguir coincidência de conhecimento realmente compartilhado.",
+      "Sem fronteiras e convenções, fatias podem acessar internamente umas às outras e produzir dependências difíceis de acompanhar."
+    ],
+    "avoid": [
+      "Evite confundir organização por funcionalidade com liberdade para duplicar invariantes críticas ou ignorar autorização em alguns fluxos."
+    ],
+    "steps": [
+      {
+        "title": "Escolha uma jornada pequena",
+        "detail": "Nomeie a fatia por uma intenção concreta, como criar pedido. Liste entradas, resultado e falhas sem começar por classes genéricas ou pela estrutura atual de pastas."
+      },
+      {
+        "title": "Reúna os elementos da entrega",
+        "detail": "Mantenha handler, validação, contrato de entrada e testes próximos. Deixe infraestrutura compartilhada em módulos próprios, mas preserve a visão do fluxo dentro da funcionalidade."
+      },
+      {
+        "title": "Defina compartilhamento deliberado",
+        "detail": "Extraia regras estáveis de domínio e políticas transversais como autenticação. Não crie um serviço genérico apenas porque duas funções têm linhas parecidas em um momento inicial."
+      },
+      {
+        "title": "Teste mudança e dependência",
+        "detail": "Altere a funcionalidade e veja quais arquivos e equipes precisam participar. Revise imports entre fatias e estabeleça contratos explícitos quando uma operação realmente depende de outra."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass CriarPedido:\n    id: str\n    total_centavos: int\n\ndef executar(comando, salvar):\n    if not comando.id.strip() or type(comando.total_centavos) is not int or comando.total_centavos <= 0:\n        raise ValueError('Pedido inválido')\n    pedido = {'id': comando.id, 'total_centavos': comando.total_centavos}\n    salvar(pedido)\n    return {'pedido_id': pedido['id']}\n\nregistros = []\nprint(executar(CriarPedido('p-1', 100), registros.append))",
+      "explanation": "O trecho pode morar em criar_pedido.py com testes da mesma funcionalidade. A lista é uma dependência de demonstração. Salvar em um banco real exige decidir identidade, concorrência, transação e comportamento de duplicidade."
+    },
+    "sources": [
+      {
+        "label": "Jimmy Bogard — Vertical Slice Architecture",
+        "url": "https://www.jimmybogard.com/vertical-slice-architecture/"
+      },
+      {
+        "label": "Python — dataclasses",
+        "url": "https://docs.python.org/3/library/dataclasses.html"
+      }
+    ],
+    "related": [
+      "service-layer",
+      "transaction-script",
+      "bounded-context"
+    ],
+    "prerequisites": [
+      "Compreender casos de uso e dependências, além de conhecer regras que precisam permanecer únicas em todo o domínio.",
+      "Ter exemplos de mudanças reais para avaliar se a organização aproxima arquivos que de fato evoluem juntos."
+    ],
+    "validation": [
+      "Teste o handler sem HTTP e depois a entrada da funcionalidade, verificando que o contrato público traduz erros corretamente.",
+      "Faça uma alteração de campo ou regra e registre quantos módulos externos à fatia precisaram mudar e por qual motivo."
+    ],
+    "failureModes": [
+      "Copiar uma regra de autorização para cada fatia pode gerar divergência quando somente algumas cópias forem atualizadas.",
+      "Um módulo compartilhado que cresce com todas as funcionalidades pode restaurar o acoplamento global que a organização pretendia reduzir."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Consumidor",
+          "technology": "client",
+          "role": "Entrada",
+          "detail": "Solicita uma funcionalidade completa."
+        },
+        {
+          "id": "slice",
+          "label": "Fatia criar pedido",
+          "technology": "python",
+          "role": "Fluxo",
+          "detail": "Reúne contrato, validação e coordenação."
+        },
+        {
+          "id": "domain",
+          "label": "Regras compartilhadas",
+          "technology": "service",
+          "role": "Domínio",
+          "detail": "Preserva invariantes realmente comuns."
+        },
+        {
+          "id": "db",
+          "label": "Persistência",
+          "technology": "postgresql",
+          "role": "Dados",
+          "detail": "Armazena o resultado da funcionalidade."
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "slice",
+          "label": "comando"
+        },
+        {
+          "from": "slice",
+          "to": "domain",
+          "label": "regra estável"
+        },
+        {
+          "from": "slice",
+          "to": "db",
+          "label": "consulta ou gravação"
+        }
+      ]
+    }
+  },
+  {
+    "id": "pipes-and-filters",
+    "name": "Pipes and Filters",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "processamento",
+      "pipeline",
+      "transformação"
+    ],
+    "summary": "Divida uma transformação em etapas com contratos claros e controle o fluxo de dados entre elas.",
+    "overview": "Pipes and Filters organiza um processamento como filtros conectados por canais. Cada filtro transforma, valida ou seleciona dados e entrega a saída ao próximo estágio. A execução pode ocorrer no mesmo processo, como funções sobre iteradores, ou em serviços ligados por filas. Distribuir as etapas adiciona custos de serialização, falhas e operação; não é requisito do padrão. O desenho deve definir formato, ordenação e política para registros inválidos. O exemplo usa geradores Python para ler valores, converter números e selecionar os positivos, demonstrando composição incremental sem carregar toda a coleção em memória.",
+    "when": [
+      "Importação de arquivos, processamento de documentos e transformações que possuem estágios distinguíveis e reutilizáveis.",
+      "Fluxos nos quais etapas têm custos diferentes e podem precisar de medição ou capacidade independente no futuro."
+    ],
+    "benefits": [
+      "Etapas pequenas podem ser verificadas isoladamente com entradas e saídas determinísticas.",
+      "A composição incremental pode reduzir memória e permitir medir onde o processamento acumula trabalho."
+    ],
+    "tradeoffs": [
+      "Filtros excessivamente pequenos aumentam passagem de dados e dificultam compreender a transformação completa.",
+      "Em execução distribuída, mensagens repetidas, ordem e falhas parciais precisam ser tratadas explicitamente por cada etapa."
+    ],
+    "avoid": [
+      "Evite assumir que conectar filtros produz automaticamente paralelismo, entrega durável ou consistência entre todas as etapas."
+    ],
+    "steps": [
+      {
+        "title": "Descreva o contrato de cada estágio",
+        "detail": "Defina tipo e formato de entrada e saída, incluindo unidades e campos obrigatórios. Decida se uma falha rejeita apenas o registro ou interrompe o lote inteiro."
+      },
+      {
+        "title": "Construa uma versão local",
+        "detail": "Implemente funções pequenas e componha o fluxo no mesmo processo. Preserve identidade do registro para relacionar o resultado e o erro à entrada original."
+      },
+      {
+        "title": "Meça fluxo e pressão",
+        "detail": "Observe duração e volume por etapa. Use buffers limitados quando houver concorrência e determine o comportamento quando um estágio consumidor é mais lento que o produtor."
+      },
+      {
+        "title": "Distribua somente o necessário",
+        "detail": "Se uma etapa precisar escalar separadamente, introduza fila e contratos versionados. Planeje confirmação, reprocessamento e armazenamento de falhas antes de prometer recuperação automática."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "def converter(linhas):\n    for numero, texto in enumerate(linhas, start=1):\n        try:\n            yield numero, int(texto)\n        except ValueError as erro:\n            raise ValueError(f'Linha {numero}: inteiro inválido') from erro\n\ndef positivos(registros):\n    for numero, valor in registros:\n        if valor > 0:\n            yield numero, valor\n\nentrada = ['10', '-2', '7']\nprint(list(positivos(converter(entrada))))",
+      "explanation": "A saída contém as linhas 1 e 3 com seus valores. O exemplo escolhe interromper no primeiro valor inválido; outra política poderia separar registros rejeitados, desde que isso fique explícito no contrato."
+    },
+    "sources": [
+      {
+        "label": "Microsoft — Pipes and Filters",
+        "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/pipes-and-filters"
+      },
+      {
+        "label": "Python — geradores",
+        "url": "https://docs.python.org/3/tutorial/classes.html#generators"
+      }
+    ],
+    "related": [
+      "transaction-script",
+      "orchestration-choreography",
+      "serverless"
+    ],
+    "prerequisites": [
+      "Conhecer iteradores, geradores e validação, além de distinguir uma transformação local de um pipeline distribuído.",
+      "Definir requisitos de ordem, volume e recuperação para o tipo de dado que será processado."
+    ],
+    "validation": [
+      "Teste cada filtro com coleção vazia, limites e valor inválido; confirme que identidade e erro permitem localizar a entrada original.",
+      "Execute um conjunto maior enquanto mede memória e tempo por etapa, verificando se alguma conversão força materialização desnecessária."
+    ],
+    "failureModes": [
+      "Um estágio que produz muito mais dados que recebe pode saturar buffers e armazenamento, mesmo com entrada aparentemente pequena.",
+      "Reprocessar uma etapa com efeitos externos pode duplicar notificações ou gravações quando não existe identidade e política de repetição."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "input",
+          "label": "Dados de entrada",
+          "technology": "database",
+          "role": "Origem",
+          "detail": "Fornece registros identificáveis."
+        },
+        {
+          "id": "parse",
+          "label": "Conversão",
+          "technology": "python",
+          "role": "Filtro",
+          "detail": "Converte formato e identifica erros."
+        },
+        {
+          "id": "validate",
+          "label": "Seleção",
+          "technology": "python",
+          "role": "Filtro",
+          "detail": "Aplica critérios de aceitação."
+        },
+        {
+          "id": "output",
+          "label": "Resultado",
+          "technology": "database",
+          "role": "Destino",
+          "detail": "Recebe registros processados."
+        }
+      ],
+      "edges": [
+        {
+          "from": "input",
+          "to": "parse",
+          "label": "registro bruto"
+        },
+        {
+          "from": "parse",
+          "to": "validate",
+          "label": "registro convertido"
+        },
+        {
+          "from": "validate",
+          "to": "output",
+          "label": "registro aceito"
+        }
+      ]
+    }
+  },
+  {
+    "id": "microkernel",
+    "name": "Microkernel e arquitetura de plugins",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "extensibilidade",
+      "plugins",
+      "contratos"
+    ],
+    "summary": "Mantenha um núcleo pequeno e estenda comportamentos por pontos de integração explícitos, versionados e controlados.",
+    "overview": "Uma arquitetura de microkernel organiza um núcleo estável e extensões que acrescentam comportamentos específicos. Em aplicações backend, o núcleo pode coordenar importação, processamento ou regras configuráveis, enquanto plugins implementam formatos ou integrações. O termo aqui descreve arquitetura de aplicação, não um microkernel de sistema operacional. O contrato das extensões precisa definir descoberta, capacidades, erros e ciclo de vida. Plugins executados no mesmo processo compartilham seus privilégios; uma interface Python não é uma barreira de segurança. O exemplo usa um registro explícito de funções para mostrar o ponto de extensão sem carregar código arbitrário do ambiente.",
+    "when": [
+      "Um produto precisa oferecer variações de formato, regras ou integrações sem modificar o núcleo a cada extensão.",
+      "Equipes ou fornecedores mantêm extensões com ciclos de publicação diferentes e aceitam seguir um contrato estável."
+    ],
+    "benefits": [
+      "O núcleo pode permanecer pequeno enquanto comportamentos opcionais são adicionados ou removidos por configuração.",
+      "Um conjunto comum de testes de contrato ajuda a validar extensões antes de habilitá-las no produto."
+    ],
+    "tradeoffs": [
+      "Compatibilidade entre versões do núcleo e plugins precisa ser planejada e testada continuamente.",
+      "Falhas e consumo de recursos de uma extensão no mesmo processo podem afetar todo o serviço."
+    ],
+    "avoid": [
+      "Evite executar plugins de origem não confiável no processo principal presumindo que uma interface ou anotação de tipo oferece isolamento."
+    ],
+    "steps": [
+      {
+        "title": "Defina a capacidade extensível",
+        "detail": "Escolha uma variação real, como normalizar um formato. Descreva entradas, saídas, efeitos permitidos, limites e erros que o núcleo consegue interpretar."
+      },
+      {
+        "title": "Crie um registro controlado",
+        "detail": "Comece com extensões conhecidas e habilitadas explicitamente. Se usar descoberta por pacotes, valide nomes, versão do contrato e origem antes de carregar a implementação."
+      },
+      {
+        "title": "Estabeleça ciclo de vida",
+        "detail": "Determine inicialização, encerramento e recursos pertencentes ao plugin. Faça falhas aparecerem com contexto e decida se o núcleo pode continuar sem a extensão."
+      },
+      {
+        "title": "Teste evolução e isolamento",
+        "detail": "Execute o contrato contra cada plugin e uma versão anterior suportada. Para código não confiável ou pesado, avalie processos separados e limites reais de recurso, não apenas convenções."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "def normalizar_csv(texto):\n    return [campo.strip() for campo in texto.split(',')]\n\ndef normalizar_linhas(texto):\n    return texto.splitlines()\n\nplugins = {'csv-simples': normalizar_csv, 'linhas': normalizar_linhas}\n\ndef processar(nome, texto):\n    if nome not in plugins:\n        raise ValueError('Plugin não habilitado')\n    return plugins[nome](texto)\n\nprint(processar('csv-simples', 'nome, valor'))",
+      "explanation": "O núcleo escolhe apenas funções registradas. csv-simples é propositalmente um formato limitado, sem suporte a aspas ou campos multilinha; para CSV completo use o módulo csv e mantenha o mesmo contrato de extensão."
+    },
+    "sources": [
+      {
+        "label": "Python Packaging — criação e descoberta de plugins",
+        "url": "https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/"
+      },
+      {
+        "label": "Python — importlib.metadata entry points",
+        "url": "https://docs.python.org/3/library/importlib.metadata.html#entry-points"
+      }
+    ],
+    "related": [
+      "ports-contracts",
+      "dependency-injection",
+      "adr"
+    ],
+    "prerequisites": [
+      "Conhecer composição, importação e controle de dependências, além de distinguir extensibilidade de execução segura de código externo.",
+      "Ter uma política de compatibilidade e uma lista de capacidades que extensões podem acessar."
+    ],
+    "validation": [
+      "Execute o mesmo contrato com dois plugins, incluindo entrada vazia e nome desconhecido, e confira formatos de saída consistentes.",
+      "Simule exceção e demora em uma extensão; confirme a política do núcleo e observe quais recursos permanecem abertos após a falha."
+    ],
+    "failureModes": [
+      "Uma extensão pode depender de detalhes internos do núcleo e quebrar após uma refatoração que parecia privada.",
+      "Descoberta automática sem controle pode carregar pacotes inesperados e introduzir execução de código com privilégios do serviço."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "core",
+          "label": "Núcleo",
+          "technology": "python",
+          "role": "Coordenação",
+          "detail": "Executa o fluxo estável e aplica políticas."
+        },
+        {
+          "id": "registry",
+          "label": "Registro de extensões",
+          "technology": "service",
+          "role": "Seleção",
+          "detail": "Habilita implementações conhecidas."
+        },
+        {
+          "id": "pluginA",
+          "label": "Plugin de formato A",
+          "technology": "python",
+          "role": "Extensão",
+          "detail": "Converte uma entrada pelo contrato."
+        },
+        {
+          "id": "pluginB",
+          "label": "Plugin de formato B",
+          "technology": "python",
+          "role": "Extensão",
+          "detail": "Oferece outra implementação compatível."
+        }
+      ],
+      "edges": [
+        {
+          "from": "core",
+          "to": "registry",
+          "label": "resolver capacidade"
+        },
+        {
+          "from": "registry",
+          "to": "pluginA",
+          "label": "selecionar"
+        },
+        {
+          "from": "registry",
+          "to": "pluginB",
+          "label": "selecionar alternativa"
+        },
+        {
+          "from": "core",
+          "to": "pluginA",
+          "label": "executar contrato"
+        }
+      ]
+    }
+  },
+  {
+    "id": "actor-model",
+    "name": "Actor Model",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Avançado",
+    "tags": [
+      "concorrência",
+      "mensagens",
+      "estado"
+    ],
+    "summary": "Encapsule estado em atores que processam mensagens e evite que vários executores alterem diretamente o mesmo objeto.",
+    "overview": "No modelo de atores, unidades independentes recebem mensagens e controlam seu próprio estado. Em implementações comuns, um ator processa uma mensagem por vez, reduzindo a necessidade de bloquear cada acesso ao estado interno. Isso não torna automaticamente o sistema distribuído, durável ou livre de corridas entre atores. Ordem, entrega, supervisão e persistência dependem da implementação e do protocolo. O exemplo usa uma tarefa asyncio e uma fila limitada para ilustrar um contador serializado no mesmo processo. Ele não implementa o runtime Akka nem oferece suas funcionalidades; usa apenas mecanismos da biblioteca padrão de Python.",
+    "when": [
+      "Muitas interações alteram o estado de uma mesma entidade lógica, como sessão, dispositivo ou partida, e podem ser expressas por mensagens.",
+      "A aplicação precisa explicitar propriedade de estado e limitar acesso concorrente em vez de compartilhar objetos mutáveis livremente."
+    ],
+    "benefits": [
+      "A propriedade do estado fica localizada e mudanças são observadas através de um protocolo de mensagens.",
+      "Mensagens permitem testar sequências de comportamento e separar a intenção do chamador da execução imediata."
+    ],
+    "tradeoffs": [
+      "Uma caixa de entrada sem limite pode transformar sobrecarga em crescimento contínuo de memória e latência.",
+      "Operações entre vários atores não são atômicas por natureza e precisam de um protocolo para sucesso, recusa e recuperação."
+    ],
+    "avoid": [
+      "Evite bloquear o executor com operações lentas ou assumir que serializar um ator resolve consistência entre todos os atores do sistema."
+    ],
+    "steps": [
+      {
+        "title": "Escolha a identidade e o estado",
+        "detail": "Defina o que pertence a um ator e quais dados só ele pode alterar. Evite transformar cada objeto pequeno em ator sem benefício de concorrência ou isolamento."
+      },
+      {
+        "title": "Especifique o protocolo",
+        "detail": "Liste mensagens, respostas e transições permitidas. Inclua correlação e prazo quando o chamador espera resposta, além de uma política para mensagens desconhecidas."
+      },
+      {
+        "title": "Controle a caixa de entrada",
+        "detail": "Use capacidade finita e defina comportamento de sobrecarga. Separe trabalho bloqueante quando necessário e decida como supervisionar falhas sem perder silenciosamente solicitações pendentes."
+      },
+      {
+        "title": "Teste reinício e ordenação",
+        "detail": "Verifique sequências concorrentes e o que ocorre quando um ator falha entre receber e responder. Se houver persistência, teste recuperação do estado e reentrega de mensagens explicitamente."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "import asyncio\n\nasync def contador(fila):\n    total = 0\n    while True:\n        valor = await fila.get()\n        try:\n            if valor is None:\n                print(total)\n                return\n            total += valor\n        finally:\n            fila.task_done()\n\nasync def main():\n    fila = asyncio.Queue(maxsize=16)\n    tarefa = asyncio.create_task(contador(fila))\n    for valor in [1, 2, 3, None]:\n        await fila.put(valor)\n    await fila.join()\n    await tarefa\n\nasyncio.run(main())",
+      "explanation": "A saída é 6. Apenas a tarefa contador modifica total, e a fila limita mensagens pendentes. O sentinela None encerra o ator didático; não existe armazenamento durável nem protocolo de resposta individual."
+    },
+    "sources": [
+      {
+        "label": "Akka — modelo de atores",
+        "url": "https://doc.akka.io/libraries/akka-core/current/typed/guide/actors-intro.html"
+      },
+      {
+        "label": "Python — asyncio.Queue",
+        "url": "https://docs.python.org/3/library/asyncio-queue.html"
+      }
+    ],
+    "related": [
+      "websocket",
+      "orchestration-choreography",
+      "pipes-and-filters"
+    ],
+    "prerequisites": [
+      "Conhecer concorrência assíncrona, filas e diferença entre tarefa, thread e processo, sem confundir async com execução paralela garantida.",
+      "Definir se o estado pode ser perdido ou precisa sobreviver ao reinício do serviço."
+    ],
+    "validation": [
+      "Envie várias mensagens e confira o resultado final; reduza a capacidade da fila e observe o produtor aguardando espaço.",
+      "Introduza uma mensagem inválida e verifique como a tarefa falha; uma solução real deve evitar que consumidores aguardem indefinidamente por resposta ou conclusão."
+    ],
+    "failureModes": [
+      "Uma tarefa que morre sem supervisão pode deixar mensagens pendentes e chamadas esperando até esgotar seus prazos.",
+      "Compartilhar uma referência mutável dentro da mensagem permite alterações externas e viola a propriedade de estado que o modelo pretendia oferecer."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "producer",
+          "label": "Produtor",
+          "technology": "python",
+          "role": "Origem",
+          "detail": "Envia mensagens e respeita capacidade."
+        },
+        {
+          "id": "mailbox",
+          "label": "Caixa de entrada",
+          "technology": "queue",
+          "role": "Buffer",
+          "detail": "Mantém mensagens pendentes com limite."
+        },
+        {
+          "id": "actor",
+          "label": "Ator contador",
+          "technology": "service",
+          "role": "Estado exclusivo",
+          "detail": "Processa mensagens e altera seu próprio estado."
+        }
+      ],
+      "edges": [
+        {
+          "from": "producer",
+          "to": "mailbox",
+          "label": "mensagem"
+        },
+        {
+          "from": "mailbox",
+          "to": "actor",
+          "label": "próxima mensagem"
+        },
+        {
+          "from": "actor",
+          "to": "producer",
+          "label": "resposta quando prevista pelo protocolo"
+        }
+      ]
+    }
+  },
+  {
+    "id": "serverless",
+    "name": "Serverless e funções gerenciadas",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "execução",
+      "eventos",
+      "operação"
+    ],
+    "summary": "Execute operações em infraestrutura gerenciada e projete limites, estado, permissões e repetição de eventos desde o início.",
+    "overview": "Serverless descreve um modelo operacional no qual o provedor gerencia parte relevante da infraestrutura e da capacidade. Funções como AWS Lambda são uma implementação comum, mas serverless não significa ausência de servidores ou de responsabilidades técnicas. A aplicação continua precisando de observabilidade, permissões, dados persistentes e limites de execução. O acionamento pode ser síncrono, assíncrono ou associado a uma fonte de eventos, com comportamentos diferentes de erro e repetição. O exemplo apresenta um handler Python para invocação direta do Lambda, executável também localmente como função. Ele não é uma configuração de implantação nem uma resposta pronta para todos os formatos de API Gateway.",
+    "when": [
+      "Operações acionadas por eventos com escopo delimitado e carga variável, adequadas aos limites do serviço escolhido.",
+      "Equipes que preferem delegar manutenção de hosts e aceitam trabalhar com contratos e características do provedor."
+    ],
+    "benefits": [
+      "O modelo reduz tarefas de provisionamento e manutenção de servidores para determinados tipos de operação.",
+      "A escala de execução pode acompanhar eventos, desde que dependências e limites de concorrência sejam dimensionados juntos."
+    ],
+    "tradeoffs": [
+      "Inicialização, limites de duração e comportamento de concorrência influenciam latência e capacidade da aplicação.",
+      "Custos e portabilidade dependem do padrão de uso, das integrações e dos serviços gerenciados escolhidos."
+    ],
+    "avoid": [
+      "Evite armazenar estado de negócio somente na memória da função ou presumir que cada evento será executado exatamente uma vez."
+    ],
+    "steps": [
+      {
+        "title": "Escolha o evento e o contrato",
+        "detail": "Documente o formato de entrada e a origem do acionamento. Diferencie invocação direta de eventos de fila ou HTTP, pois envelopes e políticas de falha não são iguais."
+      },
+      {
+        "title": "Implemente um handler pequeno",
+        "detail": "Valide a entrada e delegue regras a funções testáveis. Preserve conexões reutilizáveis quando apropriado, mas não guarde identidade de usuário em variáveis globais entre invocações."
+      },
+      {
+        "title": "Configure limites e permissões",
+        "detail": "Defina tempo máximo, memória, concorrência e acesso mínimo às dependências. Planeje como a função se conecta ao banco sem abrir mais conexões do que ele suporta."
+      },
+      {
+        "title": "Teste o ciclo operacional",
+        "detail": "Exercite entrada inválida, timeout e falha de dependência com o acionador real. Monitore duração, erros, concorrência e destino dos eventos que não puderam ser processados."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "def lambda_handler(event, context):\n    quantidade = event.get('quantidade')\n    if type(quantidade) is not int or quantidade <= 0:\n        raise ValueError('quantidade deve ser inteiro positivo')\n    return {'total_centavos': quantidade * 2500}\n\nif __name__ == '__main__':\n    print(lambda_handler({'quantidade': 3}, None))",
+      "explanation": "O resultado local é total_centavos igual a 7500. Para invocação direta, o retorno é serializado pelo runtime. Uma integração HTTP precisa do formato exigido pelo acionador; o exemplo não cria recursos nem executa uma implantação."
+    },
+    "sources": [
+      {
+        "label": "AWS Lambda — conceitos de execução",
+        "url": "https://docs.aws.amazon.com/lambda/latest/dg/concepts-basics.html"
+      },
+      {
+        "label": "AWS Lambda — boas práticas",
+        "url": "https://docs.aws.amazon.com/lambda/latest/dg/best-practices.html"
+      },
+      {
+        "label": "AWS Lambda — handler Python",
+        "url": "https://docs.aws.amazon.com/lambda/latest/dg/python-handler.html"
+      }
+    ],
+    "related": [
+      "pipes-and-filters",
+      "service-layer",
+      "orchestration-choreography"
+    ],
+    "prerequisites": [
+      "Conhecer funções, JSON e o serviço de execução escolhido, incluindo sua política de retry e o formato dos eventos.",
+      "Ter requisitos de latência, duração, custo e persistência para avaliar se a operação cabe nesse modelo."
+    ],
+    "validation": [
+      "Chame o handler localmente com quantidade válida, ausente e negativa e confirme o contrato de sucesso e erro.",
+      "Em um ambiente de teste implantado, provoque falha e repetição pelo acionador real, verificando efeitos e telemetria sem assumir o comportamento da chamada local."
+    ],
+    "failureModes": [
+      "Escala automática da função pode saturar um banco ou uma API externa que não escala no mesmo ritmo.",
+      "Reentrega de eventos após falha pode repetir efeitos já concluídos, exigindo identidade e tratamento adequado na operação."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "event",
+          "label": "Origem do evento",
+          "technology": "queue",
+          "role": "Acionamento",
+          "detail": "Entrega o payload conforme a integração."
+        },
+        {
+          "id": "runtime",
+          "label": "Runtime gerenciado",
+          "technology": "service",
+          "role": "Execução",
+          "detail": "Invoca a função e aplica limites."
+        },
+        {
+          "id": "handler",
+          "label": "Handler Python",
+          "technology": "python",
+          "role": "Aplicação",
+          "detail": "Valida e executa a operação."
+        },
+        {
+          "id": "data",
+          "label": "Estado durável",
+          "technology": "database",
+          "role": "Persistência",
+          "detail": "Mantém dados além de uma invocação."
+        }
+      ],
+      "edges": [
+        {
+          "from": "event",
+          "to": "runtime",
+          "label": "evento"
+        },
+        {
+          "from": "runtime",
+          "to": "handler",
+          "label": "invocar"
+        },
+        {
+          "from": "handler",
+          "to": "data",
+          "label": "leitura ou gravação quando necessária"
+        }
+      ]
+    }
+  },
+  {
+    "id": "soa",
+    "name": "SOA — arquitetura orientada a serviços",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Avançado",
+    "tags": [
+      "integração",
+      "contratos",
+      "capacidades"
+    ],
+    "summary": "Organize capacidades acessíveis por serviços com contratos, políticas e responsabilidades explícitas entre consumidores e fornecedores.",
+    "overview": "SOA trata da disponibilização de capacidades por serviços que consumidores podem descobrir, compreender e utilizar sob condições definidas. O modelo de referência OASIS não obriga uma tecnologia específica, como SOAP, um barramento ou REST. Serviços podem integrar sistemas de áreas e organizações diferentes, com políticas, disponibilidade e propriedade próprias. O desenho exige tratar o efeito real da interação e a confiança entre participantes, além do formato da mensagem. O exemplo apresenta um contrato de cotação com unidade e moeda explícitas. Ele é uma função local para estudar a fronteira; uma arquitetura SOA completa precisaria expor a capacidade por um mecanismo de comunicação e governança apropriado.",
+    "when": [
+      "Integrações corporativas ou entre organizações precisam disponibilizar capacidades existentes sem compartilhar detalhes internos de implementação.",
+      "Consumidores diferentes utilizam o mesmo serviço e precisam compreender contrato, política de acesso e responsabilidade operacional."
+    ],
+    "benefits": [
+      "Capacidades bem delimitadas podem ser consumidas por diferentes processos sem duplicar sua implementação interna.",
+      "Contratos e políticas explícitos ajudam a negociar compatibilidade, propriedade e comportamento esperado entre equipes."
+    ],
+    "tradeoffs": [
+      "Governança central excessiva pode tornar mudanças lentas e criar serviços genéricos que atendem mal necessidades concretas.",
+      "Compartilhar uma capacidade cria dependência operacional; sua indisponibilidade ou mudança de política pode afetar vários consumidores."
+    ],
+    "avoid": [
+      "Evite identificar SOA exclusivamente com um barramento central ou transformar qualquer função interna em um serviço remoto reutilizável."
+    ],
+    "steps": [
+      {
+        "title": "Identifique a capacidade oferecida",
+        "detail": "Descreva o resultado que o serviço possibilita, como cotar transporte, e quem é responsável por regras e operação. Separe capacidade de um processo particular que a utiliza."
+      },
+      {
+        "title": "Defina contrato e políticas",
+        "detail": "Documente mensagem, unidades, identidade, autorização e condições de uso. Inclua significado dos resultados, falhas e validade temporal, não apenas uma lista de campos."
+      },
+      {
+        "title": "Escolha a interação adequada",
+        "detail": "Avalie comunicação síncrona ou assíncrona, descoberta e observabilidade. Um intermediário pode ajudar, mas não deve concentrar regras de todos os domínios sem uma responsabilidade clara."
+      },
+      {
+        "title": "Valide consumidores e evolução",
+        "detail": "Teste o serviço com cenários reais de vários consumidores. Estabeleça versões, períodos de suporte e resposta a incidentes, medindo se o contrato continua compreensível e útil."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass Cotacao:\n    preco_centavos: int\n    moeda: str\n    prazo_dias: int\n\ndef cotar_transporte(peso_gramas: int) -> Cotacao:\n    if type(peso_gramas) is not int or peso_gramas <= 0:\n        raise ValueError('Peso deve ser inteiro positivo em gramas')\n    blocos = (peso_gramas + 999) // 1000\n    return Cotacao(preco_centavos=blocos * 800, moeda='BRL', prazo_dias=3)\n\nprint(cotar_transporte(1500))",
+      "explanation": "A cotação didática cobra por bloco de quilograma e explicita moeda e unidade. Os valores são fictícios de laboratório; não representam tarifas de transportadora. A função demonstra contrato, sem implementar transporte remoto ou catálogo de serviços."
+    },
+    "sources": [
+      {
+        "label": "OASIS — modelo de referência SOA 1.0",
+        "url": "https://docs.oasis-open.org/soa-rm/v1.0/soa-rm.html"
+      },
+      {
+        "label": "Microsoft — análise de domínio e fronteiras",
+        "url": "https://learn.microsoft.com/en-us/azure/architecture/microservices/model/domain-analysis"
+      }
+    ],
+    "related": [
+      "bounded-context",
+      "ports-contracts",
+      "orchestration-choreography"
+    ],
+    "prerequisites": [
+      "Conhecer fronteiras organizacionais e capacidades do negócio, além de distinguir contrato público de modelo interno de dados.",
+      "Ter requisitos de integração, disponibilidade e controle de acesso definidos pelos consumidores e pelo fornecedor."
+    ],
+    "validation": [
+      "Verifique entradas limites, unidades e interpretação de preço com consumidores distintos; ambos devem entender o mesmo resultado sem acordos ocultos.",
+      "Simule indisponibilidade e uma versão anterior do contrato para confirmar que cada consumidor conhece sua política de erro e suporte."
+    ],
+    "failureModes": [
+      "Um serviço universal com operações desconexas pode tornar-se gargalo de desenvolvimento, implantação e disponibilidade.",
+      "Reutilização baseada somente em semelhança de campos pode unir conceitos diferentes e produzir conflitos de regras entre consumidores."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "consumer",
+          "label": "Consumidor",
+          "technology": "client",
+          "role": "Demanda",
+          "detail": "Precisa de uma capacidade de negócio."
+        },
+        {
+          "id": "contract",
+          "label": "Contrato e políticas",
+          "technology": "service",
+          "role": "Acordo",
+          "detail": "Define interação, acesso e significado."
+        },
+        {
+          "id": "provider",
+          "label": "Serviço fornecedor",
+          "technology": "python",
+          "role": "Capacidade",
+          "detail": "Executa a cotação conforme suas regras."
+        },
+        {
+          "id": "legacy",
+          "label": "Sistema interno",
+          "technology": "database",
+          "role": "Implementação",
+          "detail": "Fornece dados sem expor sua estrutura diretamente."
+        }
+      ],
+      "edges": [
+        {
+          "from": "consumer",
+          "to": "contract",
+          "label": "compreender e aceitar"
+        },
+        {
+          "from": "consumer",
+          "to": "provider",
+          "label": "solicitar capacidade"
+        },
+        {
+          "from": "provider",
+          "to": "legacy",
+          "label": "consultar dados internos"
+        },
+        {
+          "from": "provider",
+          "to": "consumer",
+          "label": "resultado contratado"
+        }
+      ]
+    }
+  },
+  {
+    "id": "orchestration-choreography",
+    "name": "Orquestração e coreografia",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Avançado",
+    "tags": [
+      "coordenação",
+      "eventos",
+      "fluxos"
+    ],
+    "summary": "Escolha onde vive a lógica que conecta participantes de um processo e como seu progresso pode ser observado e recuperado.",
+    "overview": "Na orquestração, um coordenador conhece o fluxo e solicita ações aos participantes. Na coreografia, participantes reagem a fatos ou mensagens e a sequência emerge de suas relações. A decisão trata da distribuição da coordenação; não determina, por si só, transporte síncrono ou assíncrono. Um orquestrador pode enviar mensagens e esperar respostas, enquanto uma coreografia pode ter dependências fortes entre eventos. Nenhuma alternativa resolve automaticamente transações distribuídas. O exemplo mostra coordenação local explícita e o blueprint representa orquestração. Para adotar coreografia, seria necessário definir contratos de eventos, consumidores, correlação e recuperação, em vez de simplesmente substituir chamadas por uma fila.",
+    "when": [
+      "Um processo envolve vários participantes e a equipe precisa decidir quem conhece a sequência, as condições e o estado global.",
+      "Há mudanças frequentes no fluxo ou necessidade de acrescentar consumidores independentes a fatos de negócio publicados."
+    ],
+    "benefits": [
+      "Orquestração pode concentrar a visão de progresso e facilitar localizar a etapa pendente de uma operação.",
+      "Coreografia pode permitir novos consumidores de um fato sem alterar diretamente o produtor, quando o contrato é adequado."
+    ],
+    "tradeoffs": [
+      "Um coordenador pode se tornar excessivamente central; distribuí-lo exige persistir estado e operar sua própria disponibilidade.",
+      "Uma coreografia extensa pode esconder dependências e tornar difícil reconstruir o processo apenas pela leitura dos serviços."
+    ],
+    "avoid": [
+      "Evite escolher coreografia apenas para eliminar uma classe coordenadora ou presumir que eventos tornam todos os participantes independentes."
+    ],
+    "steps": [
+      {
+        "title": "Desenhe decisões e dependências",
+        "detail": "Liste ações, resultados e quem decide o próximo passo. Separe notificações independentes de etapas obrigatórias que determinam conclusão ou falha de toda a operação."
+      },
+      {
+        "title": "Escolha o dono do progresso",
+        "detail": "Na orquestração, defina como o coordenador persiste estado e retoma. Na coreografia, estabeleça correlação e uma forma de observar o processo sem criar um fluxo invisível."
+      },
+      {
+        "title": "Especifique mensagens e falhas",
+        "detail": "Diferencie comando, que solicita uma ação, de evento, que comunica um fato. Defina duplicação, ausência de resposta e compatibilidade sem depender de nomes vagos como processar."
+      },
+      {
+        "title": "Exercite interrupções e mudanças",
+        "detail": "Pare um participante, repita uma mensagem e acrescente um consumidor. Avalie o esforço de recuperar operações e mudar a sequência antes de declarar uma abordagem superior para todo o sistema."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "def processar_pedido(pedido, validar, separar):\n    validar(pedido)\n    resultado = separar(pedido['id'])\n    return {'pedido_id': pedido['id'], 'separacao': resultado}\n\ndef validar(pedido):\n    if not pedido.get('id'):\n        raise ValueError('Pedido sem identidade')\n\ndef separar(pedido_id):\n    return f'solicitacao-local-{pedido_id}'\n\nprint(processar_pedido({'id': 'p-1'}, validar, separar))",
+      "explanation": "A função principal conhece a ordem e representa um orquestrador local. separar apenas retorna um identificador didático, sem alterar estoque. Mover participantes para a rede exige estados persistidos e política de falhas além deste código."
+    },
+    "sources": [
+      {
+        "label": "Microsoft — Choreography",
+        "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/choreography"
+      },
+      {
+        "label": "AWS — orquestração com Step Functions",
+        "url": "https://docs.aws.amazon.com/step-functions/latest/dg/welcome.html"
+      }
+    ],
+    "related": [
+      "soa",
+      "pipes-and-filters",
+      "actor-model"
+    ],
+    "prerequisites": [
+      "Conhecer comandos, eventos, comunicação remota e diferença entre sucesso de uma etapa e conclusão do processo.",
+      "Ter uma descrição do fluxo de negócio, incluindo caminhos alternativos e ações que podem ou não ser desfeitas."
+    ],
+    "validation": [
+      "Interrompa a segunda etapa e confira como o chamador identifica que o fluxo não terminou; em produção, verifique a retomada persistida.",
+      "Para uma proposta de coreografia, reconstrua um processo usando identificador de correlação e confirme que todas as etapas necessárias são observáveis."
+    ],
+    "failureModes": [
+      "Publicar um evento antes de confirmar a mudança local pode comunicar um fato que nunca chegou a existir no estado persistido.",
+      "Um ciclo de consumidores pode produzir mensagens indefinidamente ou repetir efeitos quando contratos não distinguem causa e resultado."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Solicitante",
+          "technology": "client",
+          "role": "Entrada",
+          "detail": "Inicia o processo de pedido."
+        },
+        {
+          "id": "orchestrator",
+          "label": "Coordenador",
+          "technology": "python",
+          "role": "Fluxo",
+          "detail": "Decide sequência e acompanha resultado."
+        },
+        {
+          "id": "validation",
+          "label": "Validação",
+          "technology": "service",
+          "role": "Participante",
+          "detail": "Confere pré-condições do pedido."
+        },
+        {
+          "id": "fulfillment",
+          "label": "Separação",
+          "technology": "service",
+          "role": "Participante",
+          "detail": "Executa a ação de preparação."
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "orchestrator",
+          "label": "iniciar"
+        },
+        {
+          "from": "orchestrator",
+          "to": "validation",
+          "label": "validar"
+        },
+        {
+          "from": "validation",
+          "to": "orchestrator",
+          "label": "resultado"
+        },
+        {
+          "from": "orchestrator",
+          "to": "fulfillment",
+          "label": "solicitar separação"
+        },
+        {
+          "from": "fulfillment",
+          "to": "orchestrator",
+          "label": "resultado"
+        }
+      ]
+    }
+  },
+  {
+    "id": "ports-contracts",
+    "name": "Portas, interfaces e contratos",
+    "category": "foundation",
+    "kind": "Fundamento",
+    "organization": "Engenharia de software",
+    "level": "Fundamentos",
+    "tags": [
+      "contratos",
+      "interfaces",
+      "compatibilidade"
+    ],
+    "summary": "Defina o comportamento que uma fronteira oferece, incluindo dados, erros e garantias, sem confundir assinatura com contrato completo.",
+    "overview": "Uma porta representa uma capacidade esperada pela aplicação; uma interface descreve como chamá-la. O contrato inclui também significado, pré-condições, resultados, falhas e garantias. Duas implementações com o mesmo método podem ser incompatíveis se uma confirma persistência e a outra apenas aceita trabalho em memória. Este guia foca a engenharia dessas fronteiras, sem repetir uma arquitetura completa de portas e adaptadores. O exemplo usa Protocol e dataclass em Python para um canal de alertas. O contrato estabelece entrada imutável e uma exceção de indisponibilidade; prazo, entrega e repetição precisariam ser definidos antes de integrar um provedor real.",
+    "when": [
+      "Uma aplicação possui alternativas de implementação ou precisa proteger casos de uso de detalhes de bibliotecas externas.",
+      "Equipes compartilham uma API ou módulo e precisam evoluir o contrato sem depender de conhecimento informal entre pessoas."
+    ],
+    "benefits": [
+      "Interfaces pequenas tornam substituição e composição verificáveis através de cenários de contrato comuns.",
+      "Documentar semântica e falhas reduz falsas equivalências entre implementações que parecem iguais pelas assinaturas."
+    ],
+    "tradeoffs": [
+      "Contratos excessivamente genéricos perdem significado e obrigam consumidores a interpretar dicionários e códigos arbitrários.",
+      "Manter compatibilidade pode limitar mudanças; garantias devem ser escolhidas conforme a necessidade, não ampliadas sem evidência."
+    ],
+    "avoid": [
+      "Evite afirmar que Protocol valida valores em execução ou que uma implementação é compatível apenas porque possui um método com o mesmo nome."
+    ],
+    "steps": [
+      {
+        "title": "Nomeie a capacidade e o resultado",
+        "detail": "Descreva o que o consumidor precisa obter, como solicitar envio de alerta. Especifique se sucesso significa aceitação, persistência ou entrega confirmada ao destinatário."
+      },
+      {
+        "title": "Defina dados e falhas",
+        "detail": "Use tipos e unidades claros, limites de tamanho e identidade da operação. Separe entrada inválida de indisponibilidade e determine quais erros o consumidor deve tratar."
+      },
+      {
+        "title": "Implemente testes de contrato",
+        "detail": "Execute cenários equivalentes contra cada adaptador, incluindo falha e limite. Verificadores estáticos ajudam na forma; testes de integração precisam verificar comportamento e semântica."
+      },
+      {
+        "title": "Planeje evolução e observabilidade",
+        "detail": "Acrescente capacidades compatíveis de maneira deliberada e registre mudanças de significado. Correlacione chamadas, duração e resultado sem expor detalhes de fornecedor ao núcleo desnecessariamente."
+      }
+    ],
+    "example": {
+      "language": "python",
+      "code": "from dataclasses import dataclass\nfrom typing import Protocol\n\n@dataclass(frozen=True)\nclass Alerta:\n    evento_id: str\n    mensagem: str\n\nclass CanalIndisponivel(Exception):\n    pass\n\nclass Canal(Protocol):\n    def enviar(self, alerta: Alerta) -> None: ...\n\nclass CanalMemoria:\n    def __init__(self): self.alertas = []\n    def enviar(self, alerta): self.alertas.append(alerta)\n\ncanal: Canal = CanalMemoria()\ncanal.enviar(Alerta('e-1', 'Acesso identificado'))",
+      "explanation": "dataclasses é o nome do módulo; dataclass é o decorador importado. O exemplo registra o alerta em memória e não comprova entrega externa. O consumidor conhece Canal, enquanto a montagem escolhe CanalMemoria."
+    },
+    "sources": [
+      {
+        "label": "Python — typing.Protocol",
+        "url": "https://docs.python.org/3/library/typing.html#typing.Protocol"
+      },
+      {
+        "label": "Python — dataclasses",
+        "url": "https://docs.python.org/3/library/dataclasses.html"
+      },
+      {
+        "label": "OpenAPI — especificação",
+        "url": "https://spec.openapis.org/oas/v3.1.1.html"
+      }
+    ],
+    "related": [
+      "dependency-injection",
+      "repository",
+      "grpc"
+    ],
+    "prerequisites": [
+      "Python moderno e entendimento de anotações, exceções e imutabilidade superficial de dataclass com frozen=True.",
+      "Conhecer as garantias reais de cada fornecedor, especialmente o significado de resposta bem-sucedida e comportamento após timeout."
+    ],
+    "validation": [
+      "Execute os mesmos cenários em adaptadores reais e falsos e confira conteúdo, erro e resultado prometido pelo contrato.",
+      "Rode análise estática e teste entradas inválidas em runtime separadamente, confirmando que cada mecanismo cobre uma responsabilidade diferente."
+    ],
+    "failureModes": [
+      "Um adaptador pode capturar todos os erros e retornar sucesso, impedindo o consumidor de distinguir envio aceito de falha.",
+      "Adicionar um campo obrigatório ou alterar unidade sem versionar o contrato quebra consumidores mesmo quando o nome do método permanece igual."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "case",
+          "label": "Caso de uso",
+          "technology": "python",
+          "role": "Consumidor",
+          "detail": "Solicita uma capacidade sem escolher fornecedor."
+        },
+        {
+          "id": "port",
+          "label": "Contrato Canal",
+          "technology": "service",
+          "role": "Fronteira",
+          "detail": "Define assinatura, significado e falhas."
+        },
+        {
+          "id": "adapter",
+          "label": "Implementação",
+          "technology": "python",
+          "role": "Adaptação",
+          "detail": "Traduz o contrato para um mecanismo concreto."
+        },
+        {
+          "id": "provider",
+          "label": "Provedor externo",
+          "technology": "service",
+          "role": "Execução",
+          "detail": "Aceita ou executa o efeito conforme suas garantias."
+        }
+      ],
+      "edges": [
+        {
+          "from": "case",
+          "to": "port",
+          "label": "enviar alerta"
+        },
+        {
+          "from": "port",
+          "to": "adapter",
+          "label": "implementação do contrato"
+        },
+        {
+          "from": "adapter",
+          "to": "provider",
+          "label": "chamada específica"
+        }
+      ]
+    }
+  },
+  {
+    "id": "adr",
+    "name": "ADR — registro de decisão de arquitetura",
+    "category": "foundation",
+    "kind": "Fundamento",
+    "organization": "Engenharia de software",
+    "level": "Fundamentos",
+    "tags": [
+      "decisões",
+      "trade-offs",
+      "documentação"
+    ],
+    "summary": "Registre contexto, escolha e consequências para que a arquitetura possa ser entendida e revisada com evidências.",
+    "overview": "Um ADR preserva uma decisão arquitetural significativa e os motivos que a tornaram adequada em determinado contexto. Ele não precisa ser um documento extenso nem aprovar cada detalhe de código. O valor está em explicar restrições, alternativas e consequências, inclusive custos aceitos. Quando uma decisão muda, um novo registro pode substituir o anterior mantendo o histórico. Para system design backend, isso ajuda a comparar escolhas como comunicação síncrona, banco, particionamento ou modelo de implantação. O exemplo registra uma proposta de começar com um processo e módulos internos; não afirma que essa seja a escolha correta para qualquer produto.",
+    "when": [
+      "Uma escolha afeta estrutura, qualidade, dependências ou custo de mudança e provavelmente será questionada no futuro.",
+      "Equipes precisam compartilhar o raciocínio de decisões que não ficam evidentes apenas pela leitura do código."
+    ],
+    "benefits": [
+      "Novas pessoas conseguem entender por que uma solução existe sem depender da memória de quem participou da discussão.",
+      "Critérios explícitos permitem revisar uma escolha quando carga, equipe ou requisitos mudam de maneira relevante."
+    ],
+    "tradeoffs": [
+      "Registros desatualizados ou sem estado claro podem apresentar uma proposta rejeitada como decisão vigente.",
+      "Um processo pesado de aprovação pode atrasar ajustes pequenos e desviar atenção de decisões que realmente merecem registro."
+    ],
+    "avoid": [
+      "Evite escrever somente a solução escolhida ou usar o ADR como justificativa retrospectiva que omite alternativas e desvantagens."
+    ],
+    "steps": [
+      {
+        "title": "Delimite uma decisão",
+        "detail": "Escolha uma pergunta concreta, como manter um banco compartilhado entre módulos. Liste restrições observadas, requisitos de qualidade e o horizonte em que a escolha será avaliada."
+      },
+      {
+        "title": "Compare alternativas relevantes",
+        "detail": "Descreva poucas opções plausíveis e seus efeitos em operação, desenvolvimento e dados. Use medições quando disponíveis e marque estimativas, evitando números apresentados como certeza sem evidência."
+      },
+      {
+        "title": "Registre escolha e consequências",
+        "detail": "Informe estado, responsáveis e compromisso assumido. Inclua custos, riscos e trabalho necessário para implementação, além do que a decisão permite simplificar no contexto atual."
+      },
+      {
+        "title": "Defina revisão e substituição",
+        "detail": "Escolha sinais que justificam reavaliar, como contenção ou mudanças organizacionais. Quando houver substituição, vincule os registros e preserve a explicação original para manter a história legível."
+      }
+    ],
+    "example": {
+      "language": "json",
+      "code": "{\n  \"id\": \"ADR-001\",\n  \"titulo\": \"Um processo com módulos internos no primeiro lançamento\",\n  \"status\": \"proposto\",\n  \"contexto\": \"Uma equipe opera dois fluxos com baixa carga inicial.\",\n  \"decisao\": \"Implantar juntos, mantendo contratos entre módulos.\",\n  \"alternativas\": [\"Serviços separados desde o início\"],\n  \"consequencias\": [\n    \"Uma implantação simplifica a operação inicial.\",\n    \"Falhas de processo afetam os dois fluxos.\"\n  ],\n  \"revisar_quando\": \"Houver necessidade demonstrada de escala ou implantação independente.\"\n}",
+      "explanation": "É um exemplo didático em JSON válido, não um padrão de arquivo obrigatório. A proposta ainda precisa de avaliação no contexto do projeto; os campos facilitam leitura e podem ser convertidos para Markdown ou outra ferramenta."
+    },
+    "sources": [
+      {
+        "label": "Michael Nygard — Documenting Architecture Decisions",
+        "url": "https://www.cognitect.com/blog/2011/11/15/documenting-architecture-decisions"
+      },
+      {
+        "label": "AWS — registros de decisão arquitetural",
+        "url": "https://docs.aws.amazon.com/prescriptive-guidance/latest/architectural-decision-records/introduction.html"
+      }
+    ],
+    "related": [
+      "bounded-context",
+      "soa",
+      "load-balancing"
+    ],
+    "prerequisites": [
+      "Ter uma decisão concreta, seus participantes e restrições atuais, distinguindo fatos medidos de hipóteses e preferências.",
+      "Conhecer os requisitos de qualidade que serão afetados, como disponibilidade, latência, custo operacional e autonomia de implantação."
+    ],
+    "validation": [
+      "Peça a alguém que não participou da conversa para explicar contexto, escolha e consequências usando apenas o registro.",
+      "Confira se o código e a operação correspondem à decisão vigente e se os sinais de revisão podem ser observados na prática."
+    ],
+    "failureModes": [
+      "Sem registrar consequências negativas, o documento transmite uma escolha sem custo e impede avaliar se o compromisso continua aceitável.",
+      "Apagar o ADR antigo quando a arquitetura muda elimina evidências úteis e faz a equipe repetir debates já investigados."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "context",
+          "label": "Requisitos e evidências",
+          "technology": "service",
+          "role": "Entrada",
+          "detail": "Reúne restrições e medições do sistema."
+        },
+        {
+          "id": "decision",
+          "label": "Registro da decisão",
+          "technology": "service",
+          "role": "Memória",
+          "detail": "Guarda escolha, estado e consequências."
+        },
+        {
+          "id": "implementation",
+          "label": "Implementação",
+          "technology": "python",
+          "role": "Aplicação",
+          "detail": "Concretiza o compromisso registrado."
+        },
+        {
+          "id": "operations",
+          "label": "Observação operacional",
+          "technology": "service",
+          "role": "Revisão",
+          "detail": "Produz sinais para manter ou substituir a decisão."
+        }
+      ],
+      "edges": [
+        {
+          "from": "context",
+          "to": "decision",
+          "label": "fundamentar"
+        },
+        {
+          "from": "decision",
+          "to": "implementation",
+          "label": "orientar"
+        },
+        {
+          "from": "implementation",
+          "to": "operations",
+          "label": "medir resultado"
+        },
+        {
+          "from": "operations",
+          "to": "decision",
+          "label": "reavaliar"
+        }
+      ]
+    }
+  },
+  {
+    "id": "load-balancing",
+    "name": "Load Balancing",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de software",
+    "level": "Intermediário",
+    "tags": [
+      "capacidade",
+      "NGINX",
+      "disponibilidade"
+    ],
+    "summary": "Distribua tráfego entre instâncias elegíveis e coordene saúde, estado e drenagem para manter o serviço utilizável.",
+    "overview": "Um balanceador escolhe qual instância recebe uma requisição ou conexão. A política pode considerar alternância, quantidade de conexões, pesos ou afinidade, conforme a implementação. Balancear ajuda a utilizar capacidade, mas não cria capacidade infinita nem elimina pontos únicos de falha. As instâncias precisam estar prontas para atender, compartilhar estado quando necessário e encerrar conexões de forma planejada durante mudanças. O exemplo usa NGINX com dois servidores locais e least_conn. Ele distribui requisições HTTP; não replica dados, não implementa autoscaling e não demonstra sozinho uma topologia de alta disponibilidade.",
+    "when": [
+      "A mesma aplicação possui várias instâncias e precisa distribuir tráfego sem expor cada endereço diretamente aos consumidores.",
+      "Manutenção ou aumento de capacidade exige retirar e acrescentar instâncias de maneira controlada."
+    ],
+    "benefits": [
+      "O consumidor utiliza um endereço estável enquanto a infraestrutura escolhe uma instância adequada.",
+      "Distribuição e retirada de instâncias permitem administrar capacidade e reduzir impacto de falhas individuais quando a topologia é bem dimensionada."
+    ],
+    "tradeoffs": [
+      "Sessões locais, uploads em disco e cache por processo podem produzir resultados inconsistentes quando a requisição muda de instância.",
+      "O próprio balanceador e suas dependências precisam de disponibilidade; uma única máquina continua sendo um ponto de falha."
+    ],
+    "avoid": [
+      "Evite considerar porta aberta uma prova suficiente de prontidão ou repetir automaticamente requisições com efeitos sem compreender seu contrato."
+    ],
+    "steps": [
+      {
+        "title": "Prepare instâncias equivalentes",
+        "detail": "Execute a mesma versão e configuração relevante em portas ou hosts distintos. Retire estado de sessão indispensável da memória local ou escolha uma estratégia explícita para mantê-lo."
+      },
+      {
+        "title": "Defina política e saúde",
+        "detail": "Escolha uma política conforme o perfil de tráfego e diferencie falha de conexão de incapacidade funcional. Saiba quais verificações são passivas ou exigem recursos adicionais do produto utilizado."
+      },
+      {
+        "title": "Configure timeouts e drenagem",
+        "detail": "Determine prazos de conexão e resposta, comportamento de falha e retirada gradual de instâncias. Conexões longas exigem atenção especial porque não mudam de servidor a cada mensagem."
+      },
+      {
+        "title": "Teste distribuição e falha",
+        "detail": "Identifique a instância em respostas de teste, execute carga representativa e desligue um backend. Verifique códigos, latência e recuperação sem assumir divisão perfeitamente uniforme em amostras pequenas."
+      }
+    ],
+    "example": {
+      "language": "nginx",
+      "code": "pid logs/nginx.pid;\nerror_log logs/error.log;\nevents {}\nhttp {\n  access_log logs/access.log;\n  client_body_temp_path temp/client;\n  proxy_temp_path temp/proxy;\n  fastcgi_temp_path temp/fastcgi;\n  uwsgi_temp_path temp/uwsgi;\n  scgi_temp_path temp/scgi;\n  upstream aplicacao {\n    least_conn;\n    server 127.0.0.1:8001 max_fails=1 fail_timeout=5s;\n    server 127.0.0.1:8002 max_fails=1 fail_timeout=5s;\n  }\n  server {\n    listen 127.0.0.1:8080;\n    location / {\n      proxy_pass http://aplicacao;\n      proxy_connect_timeout 1s;\n      proxy_read_timeout 5s;\n    }\n  }\n}",
+      "explanation": "Salve como nginx.conf e forneça dois servidores HTTP nas portas indicadas. max_fails e fail_timeout participam de detecção passiva; não representam uma sonda ativa periódica. Os endereços locais limitam este laboratório à máquina."
+    },
+    "sources": [
+      {
+        "label": "NGINX — balanceamento HTTP",
+        "url": "https://nginx.org/en/docs/http/load_balancing.html"
+      },
+      {
+        "label": "NGINX — módulo upstream",
+        "url": "https://nginx.org/en/docs/http/ngx_http_upstream_module.html"
+      },
+      {
+        "label": "NGINX — controle de processos",
+        "url": "https://nginx.org/en/docs/control.html"
+      }
+    ],
+    "related": [
+      "websocket",
+      "sse",
+      "adr"
+    ],
+    "prerequisites": [
+      "Ter NGINX instalado e conhecer portas, processos e a diferença entre proxy reverso e aplicação de origem.",
+      "Definir como sessões, arquivos e estado persistente funcionam quando clientes alternam entre instâncias."
+    ],
+    "validation": [
+      "Faça várias chamadas a / por 8080 e use logs ou respostas identificadas para confirmar que ambas as instâncias recebem tráfego.",
+      "Pare uma instância e confira resposta, tempo de falha e recuperação; repita com uma aplicação que aceita conexão mas responde lentamente."
+    ],
+    "failureModes": [
+      "Um health check superficial pode manter no grupo uma instância incapaz de acessar uma dependência essencial para a operação.",
+      "Afinidade de sessão pode concentrar carga e não resolve perda de estado quando a instância escolhida deixa de existir."
+    ],
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Cliente",
+          "technology": "client",
+          "role": "Entrada",
+          "detail": "Usa um endereço de serviço."
+        },
+        {
+          "id": "lb",
+          "label": "Balanceador",
+          "technology": "nginx",
+          "role": "Distribuição",
+          "detail": "Seleciona instâncias conforme política."
+        },
+        {
+          "id": "app1",
+          "label": "Aplicação A",
+          "technology": "python",
+          "role": "Atendimento",
+          "detail": "Executa uma instância do serviço."
+        },
+        {
+          "id": "app2",
+          "label": "Aplicação B",
+          "technology": "python",
+          "role": "Atendimento",
+          "detail": "Executa outra instância equivalente."
+        },
+        {
+          "id": "db",
+          "label": "Estado compartilhado",
+          "technology": "postgresql",
+          "role": "Persistência",
+          "detail": "Mantém dados que não podem depender de uma instância."
+        }
+      ],
+      "edges": [
+        {
+          "from": "client",
+          "to": "lb",
+          "label": "HTTP"
+        },
+        {
+          "from": "lb",
+          "to": "app1",
+          "label": "requisições selecionadas"
+        },
+        {
+          "from": "lb",
+          "to": "app2",
+          "label": "requisições selecionadas"
+        },
+        {
+          "from": "app1",
+          "to": "db",
+          "label": "dados"
+        },
+        {
+          "from": "app2",
+          "to": "db",
+          "label": "dados"
+        }
+      ]
+    },
+    "walkthrough": [
+      {
+        "title": "Inicie dois backends locais",
+        "detail": "Em dois terminais separados, execute um comando em cada. O servidor de arquivos da biblioteca padrão serve somente ao laboratório; use uma pasta sem dados privados e não exponha essas portas publicamente.",
+        "language": "shell",
+        "code": "python -m http.server 8001 --bind 127.0.0.1\npython -m http.server 8002 --bind 127.0.0.1"
+      },
+      {
+        "title": "Valide e inicie o balanceador",
+        "detail": "Em um terceiro terminal POSIX, na pasta que contém nginx.conf, confira a configuração e inicie em primeiro plano. NGINX precisa estar instalado; o prefixo local mantém arquivos operacionais neste diretório.",
+        "language": "shell",
+        "code": "mkdir -p logs temp/client temp/proxy temp/fastcgi temp/uwsgi temp/scgi\nnginx -t -p \"$PWD/\" -c nginx.conf\nnginx -p \"$PWD/\" -c nginx.conf -g 'daemon off;'"
+      },
+      {
+        "title": "Observe e encerre o teste",
+        "detail": "Faça chamadas por 8080, confira os logs dos dois servidores e interrompa um deles para observar a falha. Ao terminar, use Ctrl+C nos três processos do laboratório.",
+        "language": "shell",
+        "code": "curl -i http://127.0.0.1:8080/\ncurl -i http://127.0.0.1:8080/\ncurl -i http://127.0.0.1:8080/"
+      }
+    ]
+  }
+]

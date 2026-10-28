@@ -1,0 +1,171 @@
+{
+  "description": "Marcas de terceiros usadas para identificação educacional. Sem endosso. Arquivos preservados; dimensões de exibição respeitam proporção.",
+  "retrievedAt": "2026-10-28",
+  "assets": [
+    {
+      "file": "aws.svg",
+      "source": "https://aws.amazon.com/architecture/icons/",
+      "original": "Architecture-Group-Icons_07312026/AWS-Cloud-logo_32.svg"
+    },
+    {
+      "file": "aws-lambda.svg",
+      "source": "https://aws.amazon.com/architecture/icons/",
+      "original": "Architecture-Service-Icons_07312026/Arch_Compute/64/Arch_AWS-Lambda_64.svg"
+    },
+    {
+      "file": "aws-dynamodb.svg",
+      "source": "https://aws.amazon.com/architecture/icons/",
+      "original": "Architecture-Service-Icons_07312026/Arch_Databases/64/Arch_Amazon-DynamoDB_64.svg"
+    },
+    {
+      "file": "aws-sqs.svg",
+      "source": "https://aws.amazon.com/architecture/icons/",
+      "original": "Architecture-Service-Icons_07312026/Arch_Application-Integration/64/Arch_Amazon-Simple-Queue-Service_64.svg"
+    },
+    {
+      "file": "aws-api.svg",
+      "source": "https://aws.amazon.com/architecture/icons/",
+      "original": "Architecture-Service-Icons_07312026/Arch_Networking-Content-Delivery/64/Arch_Amazon-API-Gateway_64.svg"
+    },
+    {
+      "file": "azure.svg",
+      "source": "https://learn.microsoft.com/en-us/azure/architecture/icons/",
+      "original": "Azure_Public_Service_Icons/Icons/other/10018-icon-service-Azure-A.svg"
+    },
+    {
+      "file": "azure-functions.svg",
+      "source": "https://learn.microsoft.com/en-us/azure/architecture/icons/",
+      "original": "Azure_Public_Service_Icons/Icons/compute/10029-icon-service-Function-Apps.svg"
+    },
+    {
+      "file": "azure-cosmos.svg",
+      "source": "https://learn.microsoft.com/en-us/azure/architecture/icons/",
+      "original": "Azure_Public_Service_Icons/Icons/databases/10121-icon-service-Azure-Cosmos-DB.svg"
+    },
+    {
+      "file": "azure-api.svg",
+      "source": "https://learn.microsoft.com/en-us/azure/architecture/icons/",
+      "original": "Azure_Public_Service_Icons/Icons/devops/10042-icon-service-API-Management-Services.svg"
+    },
+    {
+      "file": "azure-servicebus.svg",
+      "source": "https://learn.microsoft.com/en-us/azure/architecture/icons/",
+      "original": "Azure_Public_Service_Icons/Icons/integration/10836-icon-service-Azure-Service-Bus.svg"
+    },
+    {
+      "file": "gcp-run.svg",
+      "source": "https://cloud.google.com/icons",
+      "original": "Unique Icons/Cloud Run/SVG/CloudRun-512-color-rgb.svg"
+    },
+    {
+      "file": "gcp.svg",
+      "source": "https://www.gstatic.com/cgc/google-cloud-logo-fullcolor.svg",
+      "original": "https://www.gstatic.com/cgc/google-cloud-logo-fullcolor.svg"
+    },
+    {
+      "file": "react.png",
+      "source": "https://react.dev/apple-touch-icon.png",
+      "original": "https://react.dev/apple-touch-icon.png"
+    },
+    {
+      "file": "typescript.png",
+      "source": "https://www.typescriptlang.org/icons/icon-192x192.png",
+      "original": "https://www.typescriptlang.org/icons/icon-192x192.png"
+    },
+    {
+      "file": "python.svg",
+      "source": "https://s3.dualstack.us-east-2.amazonaws.com/pythondotorg-assets/media/files/python-logo-only.svg",
+      "original": "https://s3.dualstack.us-east-2.amazonaws.com/pythondotorg-assets/media/files/python-logo-only.svg"
+    },
+    {
+      "file": "gcp-pubsub.svg",
+      "source": "https://cloud.google.com/icons",
+      "original": "pubsub/pubsub.svg",
+      "note": "Ícone oficial de console legado, mantido sem alterações."
+    },
+    {
+      "file": "gcp-firestore.svg",
+      "source": "https://cloud.google.com/icons",
+      "original": "firestore/firestore.svg",
+      "note": "Ícone oficial de console legado, mantido sem alterações."
+    },
+    {
+      "file": "gcp-api.svg",
+      "source": "https://cloud.google.com/icons",
+      "original": "cloud_api_gateway/cloud_api_gateway.svg",
+      "note": "Ícone oficial de console legado, mantido sem alterações."
+    },
+    {
+      "file": "gcp.png",
+      "source": "https://cloud.google.com/",
+      "original": "https://www.gstatic.com/cgc/super_cloud_gradient.png",
+      "note": "Logo de marca distribuído no site oficial; preservado sem alterações."
+    },
+    {
+      "file": "postgresql.png",
+      "source": "https://www.postgresql.org/",
+      "original": "https://www.postgresql.org/media/img/about/press/elephant.png",
+      "note": "Arquivo distribuído no site oficial, preservado sem alterações."
+    },
+    {
+      "file": "kafka.png",
+      "source": "https://kafka.apache.org/",
+      "original": "https://kafka.apache.org/logos/kafka_logo--simple.png",
+      "note": "Arquivo distribuído no site oficial, preservado sem alterações."
+    },
+    {
+      "file": "rabbitmq.svg",
+      "source": "https://www.rabbitmq.com/",
+      "original": "https://www.rabbitmq.com/img/rabbitmq-logo.svg",
+      "note": "Arquivo distribuído no site oficial, preservado sem alterações."
+    },
+    {
+      "file": "nginx.svg",
+      "source": "https://nginx.org/",
+      "original": "https://nginx.org/img/nginx_logo.svg",
+      "note": "Arquivo distribuído no site oficial, preservado sem alterações."
+    },
+    {
+      "file": "nodejs.svg",
+      "source": "https://nodejs.org/en/about/branding",
+      "original": "https://nodejs.org/static/logos/nodejsHex.svg",
+      "note": "Arquivo distribuído no site oficial, preservado sem alterações."
+    },
+    {
+      "file": "docker.png",
+      "source": "https://www.docker.com/company/newsroom/media-resources/",
+      "original": "https://www.docker.com/app/uploads/2024/02/cropped-docker-logo-favicon-192x192.png",
+      "note": "Arquivo distribuído no site oficial, preservado sem alterações."
+    },
+    {
+      "file": "kubernetes.png",
+      "source": "https://kubernetes.io/",
+      "original": "https://kubernetes.io/icons/icon-128x128.png",
+      "note": "Arquivo distribuído no site oficial, preservado sem alterações."
+    },
+    {
+      "file": "prometheus.svg",
+      "source": "https://prometheus.io/",
+      "original": "https://prometheus.io/_next/static/media/prometheus-logo.7aa022e5.svg",
+      "note": "Arquivo distribuído no site oficial, preservado sem alterações."
+    },
+    {
+      "file": "grafana.svg",
+      "source": "https://grafana.com/",
+      "original": "https://a-us.storyblok.com/f/567658451994139/143x24/8360e7918b/grafana-header-logo.svg",
+      "note": "Arquivo distribuído no site oficial, preservado sem alterações."
+    },
+    {
+      "file": "opentelemetry.svg",
+      "source": "https://opentelemetry.io/",
+      "original": "https://opentelemetry.io/favicon.svg",
+      "note": "Arquivo distribuído no site oficial, preservado sem alterações."
+    },
+    {
+      "file": "redis.svg",
+      "source": "https://redis.io/",
+      "original": "SVG inline do link de marca aria-label=Redis no cabeçalho oficial",
+      "note": "SVG preservado sem alterações."
+    }
+  ]
+}

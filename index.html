@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0d1216">
+  <meta name="description" content="System Design de backend: MVC, CQRS, dados distribuídos, mensageria, resiliência e cloud. Diagramas interativos, peças oficiais e implementação passo a passo.">
+  <meta property="og:title" content="System Atlas — Arquiteturas de Backend">
+  <meta property="og:description" content="Do endpoint à arquitetura distribuída. Padrões, blueprints e implementações de backend.">
+  <meta property="og:type" content="website">
+  <title>System Atlas — Arquiteturas de Backend</title>
+  <link rel="icon" type="image/svg+xml" href="assets/atlas.svg">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="backend.css">
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem('atlas-backend-theme')||'dark';if(localStorage.getItem('atlas-motion')==='reduced')document.documentElement.dataset.motion='reduced'}catch{}</script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Pular para o conteúdo</a>
+  <div class="ambient" aria-hidden="true"><i></i><i></i><i></i></div>
+  <div class="mobile-backdrop" id="mobile-backdrop"></div>
+  <aside class="sidebar" id="sidebar" aria-label="Navegação principal">
+    <a class="brand" href="#/" aria-label="System Atlas, início"><img src="assets/atlas.svg" width="40" height="40" alt=""><span>system<span class="brand-caption">ATLAS / BACKEND ENGINEERING</span></span></a>
+    <button class="search-trigger" data-action="search"><span data-icon="search"></span><span>Encontre um padrão</span><kbd>⌘ K</kbd></button>
+    <div class="nav-label">SYSTEM DESIGN</div>
+    <nav id="primary-nav">
+      <a href="#/" data-nav="home"><span data-icon="home"></span>Visão do sistema</a>
+      <a href="#/biblioteca" data-nav="library"><span data-icon="library"></span>Biblioteca<span class="nav-count" id="total-nav">…</span></a>
+      <a href="#/biblioteca?tema=Dados" data-nav="Dados"><span data-icon="library"></span>Dados & consistência</a>
+      <a href="#/biblioteca?tema=Mensageria" data-nav="Mensageria"><span data-icon="route"></span>Mensageria & eventos</a>
+      <a href="#/biblioteca?categoria=pattern" data-nav="pattern"><span data-icon="braces"></span>Padrões de código</a>
+      <a href="#/biblioteca?categoria=architecture" data-nav="architecture"><span data-icon="network"></span>Arquiteturas</a>
+      <a href="#/cloud" data-nav="cloud"><span data-icon="cloud"></span>Cloud explorer<span class="new-badge">3</span></a>
+    </nav>
+    <div class="nav-label second">WORKSPACE</div>
+    <nav>
+      <a href="#/trilhas" data-nav="tracks"><span data-icon="route"></span>Trilhas de engenharia</a>
+      <a href="#/tecnologias" data-nav="technologies"><span data-icon="layers"></span>Peças & tecnologias</a>
+      <a href="#/laboratorio" data-nav="lab"><span data-icon="flask"></span>Laboratório</a>
+      <a href="#/comparar" data-nav="compare"><span data-icon="compare"></span>Comparar<span class="nav-count" id="compare-nav">0</span></a>
+      <a href="#/favoritos" data-nav="favorites"><span data-icon="bookmark"></span>Minha coleção<span class="nav-count" id="favorites-nav">0</span></a>
+    </nav>
+    <div class="sidebar-bottom">
+      <a class="learning-progress" href="#/trilhas"><span class="progress-orbit" id="progress-orbit"><span data-icon="sparkles"></span></span><span><strong>Um sistema por vez.</strong><small id="learning-caption">Seu progresso fica neste navegador.</small></span></a>
+      <a href="#/sobre" class="about-link"><span data-icon="info"></span>Método & referências<span data-icon="arrow-up-right"></span></a>
+      <div class="edition">BACKEND / 01 <span>FEITO PARA SYSTEM DESIGN</span></div>
+    </div>
+  </aside>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-left"><button class="icon-button mobile-menu" data-action="menu" aria-label="Abrir menu" aria-expanded="false" aria-controls="sidebar"><span data-icon="menu"></span></button><span class="breadcrumb"><span>System Atlas</span><span>/</span><strong id="breadcrumb-current">Visão do sistema</strong></span></div>
+      <div class="topbar-actions"><span class="edition-pill"><i></i> ARQUITETURA EM CONTEXTO</span><button class="icon-button" data-action="motion" aria-label="Reduzir animações" title="Reduzir animações"><span data-icon="motion"></span></button><button class="icon-button" data-action="theme" aria-label="Ativar tema escuro" title="Alternar tema"><span data-icon="moon"></span></button><a class="icon-button github-link" href="https://github.com/wesleyvieira99/DesignSystems" target="_blank" rel="noreferrer" aria-label="Abrir repositório no GitHub"><span data-icon="github"></span></a><span class="avatar" aria-label="Espaço pessoal de estudo">W</span></div>
+    </header>
+    <main id="main" tabindex="-1"><div class="loading-state"><div class="loading-mark"></div><h1>Abrindo seu atlas</h1><p>Carregando padrões, peças e implementações de backend.</p></div></main>
+    <footer class="site-footer"><span><b>system atlas</b> · Engenharia de backend</span><span>Entenda a decisão. Construa o sistema.</span><a href="#/sobre">Método & créditos <span data-icon="arrow-up-right"></span></a></footer>
+  </div>
+  <div id="compare-tray" class="compare-tray" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="search-dialog" aria-labelledby="search-title">
+    <div class="command-input"><span data-icon="search"></span><label id="search-title" class="sr-only" for="command-search">Buscar no atlas</label><input role="combobox" aria-controls="command-results" aria-autocomplete="list" aria-expanded="false" id="command-search" placeholder="MVC, CQRS, Kafka, cache, consistência…" autocomplete="off"><button class="key-button" data-action="close-search" aria-label="Fechar busca">esc</button></div>
+    <div class="command-meta">BUSQUE POR NOME, ORGANIZAÇÃO OU CONCEITO</div>
+    <div id="command-results" role="listbox" aria-label="Guias encontrados"></div>
+    <div class="command-footer"><span>↑ ↓ para navegar</span><span>↵ para abrir</span><span>esc para fechar</span></div>
+  </dialog>
+  <noscript><div class="noscript">Ative JavaScript para usar a biblioteca e os laboratórios. O conteúdo também está disponível em JSON na pasta data do repositório.</div></noscript>
+</body>
+</html>
