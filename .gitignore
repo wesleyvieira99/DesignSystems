@@ -1,0 +1,10 @@
+dist/
+node_modules/
+.DS_Store
+data/catalog.json
+test-results/
+
+__pycache__/
+*.pyc
+*.sqlite3
+examples/*.zip

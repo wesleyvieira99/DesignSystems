@@ -1,0 +1,13 @@
+{
+  "name": "system-atlas-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "System Design de backend: padrões, arquiteturas, peças e implementações em português",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/catalog.test.mjs",
+    "serve": "node scripts/serve.mjs"
+  },
+  "engines": { "node": ">=22" }
+}

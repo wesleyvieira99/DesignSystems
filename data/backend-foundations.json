@@ -1,0 +1,575 @@
+[
+  {
+    "id": "acid-transactions",
+    "name": "ACID — a fronteira de uma transação",
+    "category": "foundation",
+    "kind": "Fundamento",
+    "organization": "Engenharia de sistemas",
+    "level": "Fundamentos",
+    "tags": [
+      "ACID",
+      "transação",
+      "rollback",
+      "isolamento",
+      "SQLite"
+    ],
+    "summary": "Entenda o que uma transação protege, como um rollback preserva o estado e por que um COMMIT local não inclui automaticamente outro serviço.",
+    "overview": "ACID reúne atomicidade, consistência, isolamento e durabilidade. Atomicidade mantém um conjunto de mudanças como uma unidade; consistência preserva as invariantes expressas pelo modelo e pelas operações; isolamento define o que execuções concorrentes podem observar; durabilidade trata a sobrevivência dos commits conforme as garantias e a configuração do banco. A consistência de ACID não é a mesma propriedade formal discutida em CAP. Uma transação de banco também não transforma uma chamada HTTP em parte do mesmo commit. Para conectar efeitos externos, considere outbox, idempotência ou coordenação explícita. O exemplo usa SQLite em memória para tornar o rollback visível; isso não demonstra durabilidade em disco, alta disponibilidade ou isolamento entre múltiplos processos.",
+    "when": [
+      "Atualizações relacionadas precisam preservar uma invariante, como não deixar saldo negativo.",
+      "É necessário desfazer todas as alterações de uma operação se uma etapa falhar."
+    ],
+    "benefits": [
+      "Reduz estados intermediários observáveis e simplifica recuperação de erros locais.",
+      "Constraints e transações protegem regras mesmo quando diferentes caminhos escrevem no banco."
+    ],
+    "tradeoffs": [
+      "Transações longas aumentam contenção, retenção de versões e custo operacional.",
+      "Isolamento mais forte pode aumentar abortos e exigir repetição da operação inteira."
+    ],
+    "avoid": [
+      "Evite manter transações abertas enquanto espera por rede, interação humana ou trabalho demorado."
+    ],
+    "steps": [
+      {
+        "title": "Defina a invariante",
+        "detail": "Escreva a regra verificável: saldo não negativo, chave única ou referência existente. Expresse no banco o que puder ser garantido declarativamente."
+      },
+      {
+        "title": "Delimite o commit",
+        "detail": "Agrupe apenas as leituras e escritas que precisam compartilhar a decisão. Determine quais efeitos são externos a essa fronteira."
+      },
+      {
+        "title": "Implemente rollback",
+        "detail": "Use o mecanismo transacional do driver e deixe exceções abortarem a unidade. Não confirme parcialmente após capturar uma falha."
+      },
+      {
+        "title": "Teste concorrência e recuperação",
+        "detail": "Abra sessões simultâneas, provoque conflitos e escolha o isolamento adequado. Valide durabilidade com o armazenamento e a configuração usados de verdade."
+      }
+    ],
+    "example": {
+      "language": "Python 3 / SQLite",
+      "code": "import sqlite3\n\ndb = sqlite3.connect(\":memory:\")\ndb.execute(\"CREATE TABLE accounts (id INTEGER PRIMARY KEY, balance INTEGER CHECK(balance >= 0))\")\ndb.executemany(\"INSERT INTO accounts VALUES (?, ?)\", [(1, 100), (2, 50)])\ndb.commit()\ntry:\n    with db:\n        db.execute(\"UPDATE accounts SET balance = balance - ? WHERE id = 1\", (150,))\n        db.execute(\"UPDATE accounts SET balance = balance + ? WHERE id = 2\", (150,))\nexcept sqlite3.IntegrityError:\n    print(\"Transferência recusada; rollback.\")\nprint(db.execute(\"SELECT * FROM accounts ORDER BY id\").fetchall())\n# [(1, 100), (2, 50)]\ndb.close()",
+      "explanation": "O CHECK impede débito inválido e a exceção aborta a transação. Valores inteiros representam unidades monetárias mínimas; o laboratório não é um sistema financeiro e não modela idempotência de transferências."
+    },
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "api",
+          "label": "Caso de uso",
+          "technology": "python",
+          "role": "Unidade de trabalho",
+          "detail": "Decide quais mudanças pertencem à mesma operação."
+        },
+        {
+          "id": "db",
+          "label": "Banco transacional",
+          "technology": "database",
+          "role": "Fronteira ACID",
+          "detail": "Aplica constraints e decide commit ou rollback."
+        },
+        {
+          "id": "external",
+          "label": "Efeito externo",
+          "technology": "service",
+          "role": "Outra fronteira",
+          "detail": "Não participa automaticamente da transação local."
+        }
+      ],
+      "edges": [
+        {
+          "to": "db",
+          "label": "BEGIN / COMMIT / ROLLBACK",
+          "from": "api"
+        },
+        {
+          "to": "external",
+          "label": "Requer coordenação separada",
+          "from": "api"
+        }
+      ]
+    },
+    "sources": [
+      {
+        "label": "PostgreSQL — transações",
+        "url": "https://www.postgresql.org/docs/current/tutorial-transactions.html"
+      },
+      {
+        "label": "SQLite — atomicidade e isolamento",
+        "url": "https://www.sqlite.org/transactional.html"
+      }
+    ],
+    "related": [],
+    "prerequisites": [
+      "Conhecer o modelo de execução e as dependências declaradas no exemplo.",
+      "Definir a promessa que o sistema precisa oferecer antes de escolher a técnica."
+    ],
+    "validation": [
+      "A falha da segunda escrita também deve desfazer a primeira.",
+      "Duas sessões concorrentes devem preservar a invariante sob o isolamento escolhido."
+    ],
+    "failureModes": [
+      "Capturar a exceção e confirmar alterações parciais rompe a unidade de trabalho.",
+      "Confundir commit local com confirmação de uma mensagem externa deixa uma lacuna entre sistemas."
+    ]
+  },
+  {
+    "id": "cap-theorem",
+    "name": "CAP — consistência durante uma partição",
+    "category": "foundation",
+    "kind": "Fundamento",
+    "organization": "Engenharia de sistemas",
+    "level": "Fundamentos",
+    "tags": [
+      "CAP",
+      "linearizabilidade",
+      "partição",
+      "distribuídos"
+    ],
+    "summary": "Diferencie linearizabilidade, disponibilidade e falha de comunicação antes de classificar um sistema distribuído.",
+    "overview": "CAP descreve uma impossibilidade sob um modelo de falhas: durante uma partição, não é possível garantir simultaneamente linearizabilidade e que toda requisição a um nó não falho termine com uma resposta válida. A escolha prática depende da operação, e não apenas do produto. Uma leitura de catálogo pode tolerar atraso enquanto a reserva de uma unidade de estoque exige coordenação. O teorema não diz simplesmente que qualquer sistema escolhe duas letras para sempre. Fora da partição, latência, consistência e operação continuam apresentando custos que CAP sozinho não resolve. O experimento abaixo ilustra um histórico conflitante em memória; não implementa replicação, detecção de falhas, quorum ou recuperação distribuída.",
+    "when": [
+      "Você precisa definir o comportamento quando duas regiões deixam de se comunicar.",
+      "Uma discussão de disponibilidade está misturando resposta válida, timeout e sucesso de negócio."
+    ],
+    "benefits": [
+      "Explicita quais garantias entram em conflito sob uma falha de rede.",
+      "Ajuda a definir políticas por operação e invariantes que não podem ser relaxadas."
+    ],
+    "tradeoffs": [
+      "É um modelo formal limitado, não uma receita completa de arquitetura.",
+      "Uma escolha por consistência pode recusar trabalho; uma escolha por continuidade pode exigir reconciliação de estados."
+    ],
+    "avoid": [
+      "Evite classificar um produto inteiro como CP ou AP sem explicitar configuração, operação e semântica."
+    ],
+    "steps": [
+      {
+        "title": "Defina a promessa de leitura",
+        "detail": "Explique se uma leitura precisa observar a última escrita concluída segundo uma ordem única."
+      },
+      {
+        "title": "Especifique a partição",
+        "detail": "Desenhe quais grupos continuam vivos e quais mensagens não podem atravessar a rede."
+      },
+      {
+        "title": "Escolha o comportamento por operação",
+        "detail": "Documente quais comandos devem bloquear ou falhar e quais podem retornar dados potencialmente antigos."
+      },
+      {
+        "title": "Teste o histórico",
+        "detail": "Registre início, fim e valor de cada operação. Verifique as invariantes e ensaie a reconciliação após a comunicação voltar."
+      }
+    ],
+    "example": {
+      "language": "Python 3",
+      "code": "# Ilustração de histórico; não é um banco distribuído.\nreplica_a = {\"version\": 1}\nreplica_b = {\"version\": 1}\npartitioned = True\nreplica_a[\"version\"] = 2  # escrita confirmada em A\nif partitioned:\n    print(\"B continua respondendo:\", replica_b[\"version\"])\n    print(\"B com exigência de leitura atual: indisponível\")\n# Responder 1 após a escrita concluída em A não preserva\n# a promessa de uma leitura linearizável desse registro.",
+      "explanation": "A mesma partição permite respostas diferentes conforme o contrato. Detectar se um nó está lento ou isolado já envolve suposições e timeouts; este exemplo apenas expõe a decisão."
+    },
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "a",
+          "label": "Réplica A",
+          "technology": "database",
+          "role": "Escrita confirmada",
+          "detail": "Aceitou a mudança antes da leitura seguinte."
+        },
+        {
+          "id": "network",
+          "label": "Partição de rede",
+          "technology": "service",
+          "role": "Comunicação interrompida",
+          "detail": "Mensagens entre os grupos não chegam dentro do modelo considerado."
+        },
+        {
+          "id": "b",
+          "label": "Réplica B",
+          "technology": "database",
+          "role": "Decisão de leitura",
+          "detail": "Pode responder um estado antigo ou recusar a operação que exige estado atual."
+        }
+      ],
+      "edges": [
+        {
+          "to": "network",
+          "label": "Replicação interrompida",
+          "from": "a"
+        },
+        {
+          "to": "b",
+          "label": "Estado não propagado",
+          "from": "network"
+        }
+      ]
+    },
+    "sources": [
+      {
+        "label": "Gilbert e Lynch — prova de CAP",
+        "url": "https://www.cs.princeton.edu/courses/archive/spr22/cos418/papers/cap.pdf"
+      },
+      {
+        "label": "Gilbert e Lynch — perspectivas sobre CAP",
+        "url": "https://groups.csail.mit.edu/tds/papers/Gilbert/Brewer2.pdf"
+      }
+    ],
+    "related": [],
+    "prerequisites": [
+      "Conhecer o modelo de execução e as dependências declaradas no exemplo.",
+      "Definir a promessa que o sistema precisa oferecer antes de escolher a técnica."
+    ],
+    "validation": [
+      "A política deve diferenciar leitura local e operação que exige coordenação.",
+      "Após uma partição, o histórico observado deve respeitar as garantias documentadas."
+    ],
+    "failureModes": [
+      "Responder um erro não satisfaz automaticamente a disponibilidade formal de CAP.",
+      "Reconectar a rede não resolve conflitos sem política de reconciliação."
+    ]
+  },
+  {
+    "id": "jwt-validation",
+    "name": "JWT — validação na fronteira da API",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas",
+    "level": "Intermediário",
+    "tags": [
+      "JWT",
+      "segurança",
+      "autenticação",
+      "JWKS",
+      "API"
+    ],
+    "summary": "Verifique assinatura, emissor, audiência e tempo de validade antes de transformar claims em identidade de aplicação.",
+    "overview": "JWT é um formato de token, não um protocolo completo de login. Decodificar seu conteúdo não comprova autenticidade. Uma API que aceita tokens precisa conhecer de antemão o emissor e os algoritmos aceitos, obter chaves por um canal confiável e validar claims relevantes. A autorização do recurso ocorre depois: um token assinado não concede acesso a qualquer pedido ou conta. O exemplo demonstra validação de access token RS256 por JWKS com PyJWT. O endereço do emissor é configuração confiável do servidor e deve corresponder ao seu provedor real; não derive a URL de chaves de um campo arbitrário enviado no token. O código não implementa emissão, refresh, revogação, sessão ou todo o fluxo OAuth.",
+    "when": [
+      "APIs recebem access tokens emitidos por um provedor de identidade conhecido.",
+      "Serviços precisam validar identidade sem compartilhar uma chave privada de assinatura."
+    ],
+    "benefits": [
+      "A verificação local reduz dependência de uma consulta remota em cada requisição.",
+      "Emissor, audiência e algoritmo explícitos reduzem confusão entre contextos de uso."
+    ],
+    "tradeoffs": [
+      "Revogação imediata exige mecanismo adicional ou tokens curtos, com seus custos operacionais.",
+      "Rotação e cache de chaves precisam tolerar mudanças sem aceitar tokens inválidos."
+    ],
+    "avoid": [
+      "Não use um ID token como substituto automático de access token de uma API."
+    ],
+    "steps": [
+      {
+        "title": "Defina o contrato de confiança",
+        "detail": "Fixe emissor, audiência e algoritmos permitidos na configuração do backend. Consulte os metadados publicados pelo provedor."
+      },
+      {
+        "title": "Obtenha a chave verificadora",
+        "detail": "Use uma biblioteca mantida com suporte a JWKS, limites de rede e cache. Trate indisponibilidade sem desabilitar verificação."
+      },
+      {
+        "title": "Valide e autorize",
+        "detail": "Exija os claims essenciais e aplique permissões ao recurso solicitado. Nunca confie no payload apenas porque foi decodificado."
+      },
+      {
+        "title": "Teste rejeições",
+        "detail": "Teste assinatura inválida, issuer diferente, audiência incorreta, expiração e ausência de claims. Garanta que logs não exponham o token inteiro."
+      }
+    ],
+    "example": {
+      "language": "Python / PyJWT",
+      "code": "# Requer: python -m pip install \"PyJWT[crypto]\"\nimport jwt\nfrom jwt import PyJWKClient\n\nISSUER = \"https://identity.example.com/\"  # substitua pela configuração confiável\nJWKS_URL = \"https://identity.example.com/.well-known/jwks.json\"\nkeys = PyJWKClient(JWKS_URL)\n\ndef validate_access_token(token: str) -> dict:\n    key = keys.get_signing_key_from_jwt(token)\n    return jwt.decode(\n        token, key.key, algorithms=[\"RS256\"],\n        audience=\"orders-api\", issuer=ISSUER,\n        options={\"require\": [\"exp\", \"iss\", \"aud\", \"sub\"]},\n    )\n# O adaptador HTTP deve mapear falhas de validação para 401.\n# Depois, autorize o recurso e a ação; não basta ter um sub.",
+      "explanation": "Configuração demonstrativa, não executável com o domínio de exemplo. A função só valida o contrato criptográfico e os claims exigidos. A aplicação deve separar erros de token e falhas operacionais no provedor de chaves."
+    },
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "client",
+          "label": "Cliente",
+          "technology": "client",
+          "role": "Portador do token",
+          "detail": "Envia o access token pelo transporte autenticado da API."
+        },
+        {
+          "id": "api",
+          "label": "Fronteira da API",
+          "technology": "python",
+          "role": "Validação e autorização",
+          "detail": "Verifica o token e depois a permissão no recurso."
+        },
+        {
+          "id": "idp",
+          "label": "Provedor de identidade",
+          "technology": "service",
+          "role": "Chaves públicas confiáveis",
+          "detail": "Publica JWKS e emite tokens conforme seu contrato."
+        }
+      ],
+      "edges": [
+        {
+          "to": "api",
+          "label": "Authorization: Bearer",
+          "from": "client"
+        },
+        {
+          "to": "idp",
+          "label": "Obter/cachear JWKS",
+          "from": "api"
+        }
+      ]
+    },
+    "sources": [
+      {
+        "label": "IETF — JWT Best Current Practices",
+        "url": "https://datatracker.ietf.org/doc/html/rfc8725"
+      },
+      {
+        "label": "PyJWT — validação e JWKS",
+        "url": "https://pyjwt.readthedocs.io/en/stable/usage.html"
+      }
+    ],
+    "related": [],
+    "prerequisites": [
+      "Conhecer o modelo de execução e as dependências declaradas no exemplo.",
+      "Definir a promessa que o sistema precisa oferecer antes de escolher a técnica."
+    ],
+    "validation": [
+      "Um token expirado ou de outra audiência deve ser recusado.",
+      "Um usuário autenticado sem permissão no recurso deve receber uma negativa de autorização."
+    ],
+    "failureModes": [
+      "Aceitar algoritmo escolhido pelo token pode criar confusão de validação.",
+      "Registrar tokens em logs ou URLs pode expor credenciais de acesso."
+    ]
+  },
+  {
+    "id": "distributed-tracing",
+    "name": "Distributed Tracing — seguir uma operação",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas",
+    "level": "Intermediário",
+    "tags": [
+      "tracing",
+      "observabilidade",
+      "OpenTelemetry",
+      "spans"
+    ],
+    "summary": "Correlacione o trabalho de serviços diferentes usando contexto de trace e spans com fronteiras significativas.",
+    "overview": "Um trace descreve o percurso de uma operação por spans relacionados. Cada span mede um trabalho com início e fim; o contexto propagado permite conectar chamadas entre processos. Logs respondem a detalhes de eventos, métricas mostram tendências agregadas e traces ajudam a localizar onde uma operação consumiu tempo ou falhou. Esses sinais se complementam. OpenTelemetry separa instrumentação da escolha de backend, mas não armazena traces por si só. É necessário configurar SDK, exportação, coleta e destino. O exemplo usa um exporter de console para demonstrar spans locais; não contém propagação entre processos, transporte OTLP ou uma plataforma de observabilidade completa.",
+    "when": [
+      "Uma requisição atravessa vários serviços e o tempo total não revela o gargalo.",
+      "Incidentes precisam correlacionar trabalho síncrono e assíncrono com uma mesma operação."
+    ],
+    "benefits": [
+      "Expõe dependências e distribuições de latência por etapa de uma requisição.",
+      "Contexto comum facilita navegar entre logs e traces durante diagnóstico."
+    ],
+    "tradeoffs": [
+      "Instrumentação, exportação e armazenamento consomem recursos e exigem orçamento.",
+      "Amostragem pode ocultar requisições raras; atributos sem controle podem vazar dados ou aumentar custo."
+    ],
+    "avoid": [
+      "Não registre credenciais, payloads completos ou identificadores pessoais como atributos por conveniência."
+    ],
+    "steps": [
+      {
+        "title": "Defina as fronteiras",
+        "detail": "Crie spans para operações significativas, evitando um span para cada função trivial. Nomeie recursos com baixa cardinalidade."
+      },
+      {
+        "title": "Propague o contexto",
+        "detail": "Use instrumentação compatível com o protocolo e preserve contexto em mensagens. Processamento posterior não é automaticamente filho da chamada inicial."
+      },
+      {
+        "title": "Configure exportação",
+        "detail": "Escolha coletor, batch, limites e estratégia de amostragem. Dê identidade estável ao serviço por atributos de recurso."
+      },
+      {
+        "title": "Investigue uma falha conhecida",
+        "detail": "Introduza atraso em uma dependência e confirme que o trace mostra a etapa correta. Correlacione IDs sem expor segredos."
+      }
+    ],
+    "example": {
+      "language": "Python / OpenTelemetry",
+      "code": "# Requer: pip install opentelemetry-api opentelemetry-sdk\nfrom opentelemetry import trace\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import SimpleSpanProcessor, ConsoleSpanExporter\n\nprovider = TracerProvider()\nprovider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))\ntrace.set_tracer_provider(provider)\ntracer = trace.get_tracer(\"atlas.orders\")\nwith tracer.start_as_current_span(\"create_order\"):\n    with tracer.start_as_current_span(\"validate_order\") as span:\n        span.set_attribute(\"order.items_count\", 2)\nprovider.shutdown()",
+      "explanation": "O console recebe dois spans relacionados. Em produção, prefira exportação em lote e um destino adequado. O exemplo demonstra a relação pai/filho, não a comunicação entre dois serviços reais."
+    },
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "app",
+          "label": "Aplicação",
+          "technology": "python",
+          "role": "Gera spans",
+          "detail": "Instrumenta a operação e preserva contexto."
+        },
+        {
+          "id": "collector",
+          "label": "Collector",
+          "technology": "opentelemetry",
+          "role": "Processa e exporta",
+          "detail": "Pode receber, filtrar, agrupar e encaminhar sinais."
+        },
+        {
+          "id": "backend",
+          "label": "Backend de traces",
+          "technology": "service",
+          "role": "Armazena e consulta",
+          "detail": "Retém os dados e oferece consulta e visualização."
+        }
+      ],
+      "edges": [
+        {
+          "to": "collector",
+          "label": "Exportação OTLP no cenário real",
+          "from": "app"
+        },
+        {
+          "to": "backend",
+          "label": "Pipeline de telemetria",
+          "from": "collector"
+        }
+      ]
+    },
+    "sources": [
+      {
+        "label": "OpenTelemetry — traces",
+        "url": "https://opentelemetry.io/docs/concepts/signals/traces/"
+      },
+      {
+        "label": "OpenTelemetry Python — instrumentação",
+        "url": "https://opentelemetry.io/docs/languages/python/instrumentation/"
+      }
+    ],
+    "related": [],
+    "prerequisites": [
+      "Conhecer o modelo de execução e as dependências declaradas no exemplo.",
+      "Definir a promessa que o sistema precisa oferecer antes de escolher a técnica."
+    ],
+    "validation": [
+      "Spans da mesma operação devem compartilhar trace_id e relações corretas.",
+      "Indisponibilidade do destino de telemetria não deve bloquear indefinidamente o serviço principal."
+    ],
+    "failureModes": [
+      "Contexto perdido em uma fila fragmenta o percurso em traces sem conexão.",
+      "Atributos ilimitados e amostragem inadequada aumentam custo sem melhorar diagnóstico."
+    ]
+  },
+  {
+    "id": "health-probes",
+    "name": "Health probes — vivo, pronto e inicializado",
+    "category": "architecture",
+    "kind": "Padrão arquitetural",
+    "organization": "Engenharia de sistemas",
+    "level": "Intermediário",
+    "tags": [
+      "health probes",
+      "readiness",
+      "liveness",
+      "startup",
+      "Kubernetes"
+    ],
+    "summary": "Separe sinais de liveness, readiness e startup para evitar tráfego prematuro e ciclos de reinicialização.",
+    "overview": "Um processo pode estar vivo e ainda não estar pronto para servir. Kubernetes usa probes com finalidades diferentes: liveness ajuda a decidir reinício; readiness controla se o workload está apto a receber tráfego pelo serviço; startup protege uma inicialização lenta antes da avaliação normal das demais probes. Esses sinais são contratos operacionais e não apenas endpoints que retornam 200. Colocar toda dependência remota na liveness pode reiniciar réplicas saudáveis durante uma indisponibilidade compartilhada e piorar o incidente. O fragmento abaixo pertence à especificação de um contêiner e pressupõe uma aplicação real que implemente os três endpoints.",
+    "when": [
+      "Um serviço leva tempo variável para iniciar ou carregar estado antes de aceitar tráfego.",
+      "É necessário distinguir uma falha recuperável com restart de uma indisponibilidade temporária."
+    ],
+    "benefits": [
+      "Reduz envio de tráfego a instâncias ainda não prontas.",
+      "Reinicia processos travados conforme um sinal de recuperação deliberado."
+    ],
+    "tradeoffs": [
+      "Thresholds agressivos podem gerar oscilação, perda de capacidade e reinícios em cascata.",
+      "Checks caros consomem recursos justamente quando o serviço está sobrecarregado."
+    ],
+    "avoid": [
+      "Não use readiness como único mecanismo de controle de carga ou drenagem de conexões."
+    ],
+    "steps": [
+      {
+        "title": "Defina três contratos",
+        "detail": "Liveness testa saúde interna mínima; readiness testa capacidade de servir conforme a política; startup confirma a inicialização."
+      },
+      {
+        "title": "Implemente checks baratos",
+        "detail": "Evite consultas profundas em cada probe. Não exponha segredos nem detalhes internos na resposta pública."
+      },
+      {
+        "title": "Dimensione os intervalos",
+        "detail": "Considere latência real, tempo de boot, timeout e número de falhas. Faça a conta do orçamento de inicialização."
+      },
+      {
+        "title": "Ensaie degradação",
+        "detail": "Derrube uma dependência compartilhada e verifique se o cluster perde readiness sem reiniciar tudo desnecessariamente. Teste recuperação e shutdown."
+      }
+    ],
+    "example": {
+      "language": "YAML / Kubernetes",
+      "code": "# Trecho para spec.containers[0]; endpoints devem existir na aplicação.\nstartupProbe:\n  httpGet: {path: /startupz, port: 8080}\n  periodSeconds: 5\n  failureThreshold: 30\nreadinessProbe:\n  httpGet: {path: /readyz, port: 8080}\n  periodSeconds: 5\n  timeoutSeconds: 2\n  failureThreshold: 3\nlivenessProbe:\n  httpGet: {path: /livez, port: 8080}\n  periodSeconds: 10\n  timeoutSeconds: 2\n  failureThreshold: 3",
+      "explanation": "O fragmento não é um manifesto completo. A startup probe permite aproximadamente 150 segundos de tentativas pelos valores escolhidos; observe também timeout e comportamento efetivo do processo. Os números são ponto de partida de laboratório, não recomendação universal."
+    },
+    "blueprint": {
+      "nodes": [
+        {
+          "id": "probe",
+          "label": "Kubelet",
+          "technology": "kubernetes",
+          "role": "Executa probes",
+          "detail": "Verifica o contêiner conforme a configuração."
+        },
+        {
+          "id": "app",
+          "label": "Aplicação",
+          "technology": "service",
+          "role": "Declara saúde",
+          "detail": "Oferece endpoints com contratos distintos."
+        },
+        {
+          "id": "route",
+          "label": "Service / endpoints",
+          "technology": "kubernetes",
+          "role": "Encaminha tráfego",
+          "detail": "Readiness influencia quais instâncias estão aptas a receber novas conexões."
+        }
+      ],
+      "edges": [
+        {
+          "to": "app",
+          "label": "HTTP de saúde",
+          "from": "probe"
+        },
+        {
+          "to": "route",
+          "label": "Estado de readiness",
+          "from": "probe"
+        }
+      ]
+    },
+    "sources": [
+      {
+        "label": "Kubernetes — probes",
+        "url": "https://kubernetes.io/docs/concepts/workloads/pods/probes/"
+      },
+      {
+        "label": "Azure — sistemas que se recuperam",
+        "url": "https://learn.microsoft.com/en-us/azure/architecture/guide/design-principles/self-healing"
+      }
+    ],
+    "related": [],
+    "prerequisites": [
+      "Conhecer o modelo de execução e as dependências declaradas no exemplo.",
+      "Definir a promessa que o sistema precisa oferecer antes de escolher a técnica."
+    ],
+    "validation": [
+      "Durante startup demorado, a aplicação não deve reiniciar antes do orçamento esperado.",
+      "Uma falha externa transitória deve produzir o efeito operacional previsto, sem restart em massa."
+    ],
+    "failureModes": [
+      "Liveness depende de banco indisponível e reinicia todas as réplicas simultaneamente.",
+      "Readiness responde sucesso antes de a aplicação conseguir tratar requisições."
+    ]
+  }
+]
