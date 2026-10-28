@@ -1,7 +1,5 @@
-name: Publicar System Atlas no GitHub Pages
+name: Publicar por Actions (opcional)
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

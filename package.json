@@ -7,7 +7,10 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test tests/catalog.test.mjs",
-    "serve": "node scripts/serve.mjs"
+    "serve": "node scripts/serve.mjs",
+    "publish:pages": "node scripts/publish.mjs"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  }
 }

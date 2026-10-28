@@ -41,6 +41,20 @@ python3 app.py
 
 Abra http://127.0.0.1:8080. A documentação do exemplo descreve o fluxo, as rotas, as respostas e os limites do laboratório local. `http.server` é usado para aprendizado; não é um servidor de produção.
 
+## Publicar uma atualização
+
+O GitHub Pages está configurado para **Deploy from a branch → gh-pages → / (root)**. Essa publicação estática está funcionando. A tentativa inicial pelo Actions foi bloqueada pelo GitHub por uma pendência de cobrança da conta; por isso, o workflow alternativo está disponível apenas para execução manual.
+
+Com Git autenticado e acesso de escrita ao repositório, execute na branch de código:
+
+```sh
+npm run publish:pages
+```
+
+O comando testa o catálogo e o MVC, gera o site e atualiza `gh-pages` em um clone temporário, preservando o histórico. Não altera o checkout atual nem executa push forçado. O GitHub publica a branch depois do envio. As mudanças do código-fonte em `main` devem ser commitadas e enviadas separadamente.
+
+Se quiser usar o workflow opcional após regularizar o Actions, primeiro selecione **Settings → Pages → Source → GitHub Actions** e então execute “Publicar por Actions (opcional)”. Não alterne a fonte de publicação sem escolher qual fluxo manter.
+
 ## Conteúdo
 
 - `data/backend-foundations.json`: transações, CAP, identidade, traces e probes.
@@ -52,7 +66,7 @@ Abra http://127.0.0.1:8080. A documentação do exemplo descreve o fluxo, as rot
 
 Cada entrada contém `id`, `name`, `category`, `kind`, `organization`, `level`, `tags`, `summary`, `overview`, `when`, `benefits`, `tradeoffs`, `avoid`, `steps`, `example`, `sources` e `related`. Arquiteturas e guias aprofundados incluem `blueprint`, `prerequisites`, `validation`, `failureModes` e, quando aplicável, `walkthrough` com etapas e código. `provider` identifica os guias cloud.
 
-O build valida os dados, gera `data/catalog.json`, empacota o MVC e copia somente os arquivos públicos para `dist/`. O workflow publica a branch `main` no GitHub Pages após os testes. Arquivos temporários, caches Python e bases SQLite não são publicados.
+O build valida os dados, gera `data/catalog.json`, empacota o MVC e copia somente os arquivos públicos para `dist/`. A publicação atual usa a branch `gh-pages` com os arquivos já gerados. Arquivos temporários, caches Python e bases SQLite não são publicados.
 
 ## Fontes e marcas
 
